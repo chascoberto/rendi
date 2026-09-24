@@ -1,0 +1,28 @@
+{
+  "name": "@rendi/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:https": "vite --mode https",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -b",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@rendi/shared": "workspace:*",
+    "hono": "^4.13.9",
+    "lucide-vue-next": "^1.0.0",
+    "vue": "^3.5.43",
+    "vue-router": "^5.3.1"
+  },
+  "devDependencies": {
+    "@rendi/api": "workspace:*",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-vue": "^6.0.9",
+    "@vue/tsconfig": "^0.9.1",
+    "vite": "^8.3.1",
+    "vue-tsc": "^3.3.11"
+  }
+}
