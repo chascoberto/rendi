@@ -1,3 +1,6 @@
+export * from './barcode'
+export * from './dates'
 export * from './money'
 export * from './stock'
+export * from './text'
 export * from './units'

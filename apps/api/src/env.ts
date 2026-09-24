@@ -5,6 +5,8 @@ const EnvSchema = z.object({
   HOST: z.string().default('127.0.0.1'),
   PORT: z.coerce.number().int().positive().default(3000),
   DATABASE_PATH: z.string().default('./data/rendi.db'),
+  /** Rutas relativas al directorio de trabajo (apps/api, también en systemd). */
+  MIGRATIONS_DIR: z.string().default('./drizzle'),
 })
 
 export type Env = z.infer<typeof EnvSchema>

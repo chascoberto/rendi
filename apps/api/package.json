@@ -10,15 +10,25 @@
     "build": "tsdown",
     "start": "node --env-file-if-exists=.env dist/server.mjs",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate-cli.ts",
+    "db:seed": "tsx --env-file-if-exists=.env src/db/seed/index.ts",
+    "db:reset": "tsx --env-file-if-exists=.env src/db/seed/index.ts --reset",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
     "@rendi/shared": "workspace:*",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.3",
     "hono": "^4.13.9",
+    "uuid": "^14.0.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.11",
     "tsdown": "^0.23.0",
     "tsx": "^4.23.15"
   }

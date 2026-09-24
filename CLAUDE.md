@@ -48,7 +48,13 @@ apps/api/src/
   server.ts         arranque HTTP
   env.ts            configuración validada con Zod (.env)
   modules/<dominio>/  routes.ts · service.ts · repo.ts (+ tests)
-  db/               schema/ (un archivo por módulo), client.ts, migrate.ts, seed/   (paso 2)
+  db/
+    schema/         un archivo por módulo (+ _columns.ts con helpers de columnas)
+    client.ts       createDb(path) con pragmas; tipos Db, Tx, DbOrTx
+    migrate.ts      runMigrations (con respaldo VACUUM INTO previo si hay pendientes)
+    migrate-cli.ts  pnpm db:migrate
+    seed/           data.ts (datos de ejemplo) + index.ts (seed, db:seed, db:reset)
+  test/db.ts        createTestDb(): SQLite en memoria con todas las migraciones
   lib/              utilidades transversales (errores, ids, tiempo, sesión)
   cli/              comandos (crear usuario, reset de contraseña)
 apps/api/drizzle/   migraciones SQL generadas (se commitean)
@@ -101,14 +107,17 @@ en su propia migración.
 
 - `locations` (Despensa, Refrigerador, Congelador; el usuario puede agregar más)
 - `stock_items` = lotes (product, location, quantity, expires_on?, opened_at?, added_at)
-- `stock_movements` (product, stock_item?, delta, reason `purchase|consume|depleted|adjust|receipt`, user, purchase_id?, receipt_id?)
+- `stock_movements` (action_id, product, stock_item?, delta, reason `purchase|consume|depleted|adjust|receipt`, user?,
+  purchase_id?, undone_at?). `action_id` agrupa los movimientos de una acción rápida para deshacerlos juntos.
+  `receipt_id` se agrega en la Fase 3.
 
 **Compras**
 
 - `shopping_list_items`: **una sola lista permanente por hogar**. Campos: product_id? | food_id? | free_text?,
   quantity?, note?, source `manual|min_stock|menu|lunchbox`, source_ref?, supermarket_id?, checked_at?, checked_by?,
-  purchase_id? (se llena al finalizar la compra). Índice único parcial para evitar duplicados automáticos.
-- `purchases` (household, supermarket_id, purchased_at, user_id, receipt_id? ← Fase 3)
+  check_updated_at? (instante del cliente, para la cola offline), purchase_id? (se llena al finalizar la compra),
+  added_by?. Índice único parcial: un solo ítem `min_stock` abierto por producto. CHECK: exactamente un destino.
+- `purchases` (household, supermarket_id, purchased_at, user_id; `receipt_id` se agrega en la Fase 3)
 - `supermarkets` (globales: name, slug, has_online_prices, is_wholesale, website_url?, sort_order, active)
 
 **Precios (Fases 2 a 4, futuras)**: `price_observations` (product, supermarket, price_clp, pack_count, is_offer,
@@ -154,6 +163,19 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 - **`members` unificado** para adultos y niños (porciones y variantes de menú sobre una sola tabla).
 - **Fuentes de precio intercambiables** (futuro): interfaz `PriceSource` en `modules/prices/sources/`,
   todas escriben en `price_observations`.
+- **Migraciones**: se generan con drizzle-kit y se commitean; **nunca editar una migración ya aplicada**, crear otra.
+  Lo que drizzle-kit no expresa (triggers, datos de referencia) va en migraciones `--custom`:
+  `0001_stock_mode_guards` (triggers de invariantes de stock; errores con prefijo estable `stock_bulk_level`,
+  `stock_unit_integer`, `stock_bulk_single_lot`) y `0002_reference_data` (categorías y supermercados, ids = slugs).
+  La API aplica las pendientes al arrancar; en producción, antes crea `data/pre-migration-<fecha>.db`.
+  Nota: la tabla `__drizzle_migrations` deja `id` en NULL; se identifica cada migración por `created_at`.
+- **Columnas**: casing `snake_case` automático (en TS se escribe camelCase). Timestamps con `mode: 'timestamp_ms'`
+  (se exponen como `Date`).
+- **Inyección de dependencias**: `createApp({ db })`; los handlers leen `c.var.db`. Los servicios reciben
+  `DbOrTx` para poder componerse dentro de una transacción (better-sqlite3 es síncrono: transacciones síncronas).
+- **Seed** sin códigos de barra (inventarlos podría chocar con EAN reales). Nombres de miembros ficticios.
+- **better-sqlite3 se compila desde el código fuente** con node-gyp en la instalación: el servidor necesita
+  `build-essential` y `python3` antes de `pnpm install`.
 - **Respaldo**: `sqlite3 .backup` (o `VACUUM INTO`), nunca `cp` del archivo en caliente con WAL.
 - **Despliegue**: Ubuntu Server x64, sin Docker, servicio systemd. Se clona el repo y se ejecuta `pnpm install`
   en el servidor (no se copia node_modules). Acceso remoto vía Tailscale (`tailscale serve`, HTTPS).
@@ -173,7 +195,7 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 ### Pasos de la Fase 1
 
 1. ✅ Andamiaje: workspace, tsconfig, lint, paquete `shared` (unidades, CLP, validación de stock por modo), API y web mínimas.
-2. ⏳ Base de datos: esquema Drizzle, primera migración, seed chileno.
+2. ✅ Base de datos: esquema Drizzle (15 tablas), migraciones 0000–0002, seed chileno, tests de invariantes.
 3. ⏳ Auth + hogar (miembros, preferencias de niños) + shell de la app (layout, navegación).
 4. ⏳ Catálogo + escáner EAN (+ Open Food Facts, packs).
 5. ⏳ Despensa: lotes, acciones rápidas con deshacer, próximos a vencer.
@@ -192,4 +214,15 @@ pnpm build                   # web → apps/web/dist, API → apps/api/dist/serv
 pnpm --filter @rendi/api start       # arranca la API compilada
 ```
 
-Migraciones, seed, CLI de usuarios y despliegue: se agregan en los pasos 2, 3 y 7.
+Base de datos (desde la raíz; rutas relativas a `apps/api`):
+
+```bash
+pnpm --filter @rendi/api db:generate   # genera una migración a partir de cambios en src/db/schema
+pnpm --filter @rendi/api db:generate --custom --name <nombre>   # migración SQL manual (triggers, datos)
+pnpm --filter @rendi/api db:migrate    # aplica migraciones pendientes (la API también lo hace al arrancar)
+pnpm --filter @rendi/api db:seed       # siembra datos de ejemplo si la base está vacía (no en producción)
+pnpm --filter @rendi/api db:reset      # borra la base, migra y siembra (no en producción)
+pnpm --filter @rendi/api db:studio     # explorador visual de Drizzle
+```
+
+CLI de usuarios y despliegue: se agregan en los pasos 3 y 7.
