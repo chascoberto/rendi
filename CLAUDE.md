@@ -27,18 +27,23 @@ Se usa principalmente desde el celular, incluso dentro del supermercado.
 - **Monorepo** pnpm workspaces (pnpm 10, Node ≥ 22). **TypeScript fijado en `~6.0.3`**:
   TS 7 (compilador nativo) no es compatible con typescript-eslint (`<6.1.0`) ni está garantizado con vue-tsc.
   Revisar al actualizar dependencias.
-- **Frontend** `apps/web`: Vue 3 + Vite 8 + TypeScript, Vue Router. PWA con vite-plugin-pwa (paso 7).
-  Por agregar: TanStack Query (estado del servidor, actualizaciones optimistas), Pinia (mínimo),
-  `barcode-detector` (escáner EAN: API nativa o zxing-cpp WASM servido localmente), lucide-vue-next.
+- **Frontend** `apps/web`: Vue 3 + Vite 8 + TypeScript, Vue Router 5, TanStack Query (estado del servidor),
+  lucide-vue-next (íconos). Sin Pinia por ahora: todo el estado es del servidor; se agrega si aparece estado
+  local compartido (p. ej. la cola offline). Por agregar: `barcode-detector` (paso 4), vite-plugin-pwa (paso 7).
 - **Backend** `apps/api`: Hono sobre `@hono/node-server`. Validación con Zod 4 (`@hono/zod-validator`).
   Build con tsdown → `dist/server.mjs` (las dependencias npm quedan externas; `@rendi/*` se incluye en el bundle).
 - **Base de datos**: SQLite con better-sqlite3 + Drizzle ORM; migraciones SQL versionadas con drizzle-kit (paso 2).
 - **Auth**: usuario/contraseña, Argon2id (`@node-rs/argon2`), sesiones propias en tabla `sessions`
   (se guarda el hash SHA-256 del token), cookie `HttpOnly; Secure; SameSite=Lax`, 30 días deslizantes.
-  Sin registro público: los usuarios se crean por CLI.
+  Sin registro público: un adulto con sesión crea las cuentas de otros adultos desde Hogar (o por CLI).
+  Reglas: nadie elimina su propia cuenta y el hogar siempre conserva al menos un adulto; eliminar un adulto
+  borra su cuenta y sesiones (cascada). Cambio de contraseña solo por CLI (`pnpm user:passwd`). Login limitado a 5 intentos fallidos por usuario cada 15 min
+  (en memoria). CSRF: se rechazan escrituras con `Sec-Fetch-Site` distinto de same-origin/none (independiente
+  del Host, funciona detrás de `tailscale serve`). `COOKIE_SECURE` por defecto: true solo en producción.
 - **Compartido** `packages/shared`: tipos de dominio, esquemas Zod, unidades y normalización, formato CLP.
   Es solo código fuente (sin build); Vite y tsdown lo compilan.
-- Tests: Vitest. Lint: ESLint (flat config) + Prettier.
+- Tests: Vitest (unitarios e integración de la API contra SQLite en memoria) y **Playwright** (e2e en Chromium
+  con tamaño de celular Pixel 7, locale es-CL, zona America/Santiago). Lint: ESLint (flat config) + Prettier.
 
 ## Estructura
 
@@ -55,7 +60,8 @@ apps/api/src/
     migrate-cli.ts  pnpm db:migrate
     seed/           data.ts (datos de ejemplo) + index.ts (seed, db:seed, db:reset)
   test/db.ts        createTestDb(): SQLite en memoria con todas las migraciones
-  lib/              utilidades transversales (errores, ids, tiempo, sesión)
+  lib/              context.ts (AppEnv/AuthEnv), errors.ts (AppError + handleError), validation.ts (validate),
+                    csrf.ts, rate-limit.ts
   cli/              comandos (crear usuario, reset de contraseña)
 apps/api/drizzle/   migraciones SQL generadas (se commitean)
 apps/web/src/
@@ -72,6 +78,12 @@ deploy/             rendi.service, script de respaldo, crontab de ejemplo (paso 
 
 - Código e identificadores en inglés; textos de UI, comentarios y documentación en español de Chile.
 - Prettier: sin punto y coma, comillas simples, 100 columnas.
+- **Nombres visibles** se normalizan al guardar (funciones de `packages/shared/src/text.ts`, aplicadas en los
+  esquemas Zod y al crear desde servicios/CLI/seed):
+  - Personas: `capitalizePersonName`, mayúscula en cada palabra y tras guion, salvo las partículas
+    de/del/la/las/los/y/e fuera del comienzo ("María de los Ángeles", "Ana-María").
+  - Alimentos, productos y hogar: `capitalizeFirst`, solo la primera letra ("Zapallo italiano").
+  - Los usernames se guardan en minúsculas.
 - `import type` obligatorio para importaciones solo de tipos.
 - Dependencias entre paquetes: `web → shared`, `api → shared`, y `web` importa **solo tipos** de `@rendi/api/app`.
 - Dentro de la API, un módulo usa otro solo a través de su `service`, nunca tocando sus tablas.
@@ -89,7 +101,8 @@ en su propia migración.
 **Hogar y personas**
 
 - `households` (name, timezone, currency)
-- `members` (household, name, kind `adult|child`, birth_date?, notes?, diet_profile json? ← Fase 5).
+- `members` (household, name, kind `adult|child`, birth_date?, notes?, avatar_emoji?, diet_profile json? ← Fase 5).
+  `avatar_emoji`: exactamente un emoji RGI (`avatarEmojiSchema` en shared), o null = inicial del nombre.
   Adultos y niños son todos miembros; un adulto es el que tiene un `user`.
 - `users` (member_id único, username, password_hash) · `sessions` (id = sha256 del token, user_id, expires_at)
 - `member_food_prefs` (member_id, food_id, stance `accepts|rejects`, notes)
@@ -165,14 +178,45 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   todas escriben en `price_observations`.
 - **Migraciones**: se generan con drizzle-kit y se commitean; **nunca editar una migración ya aplicada**, crear otra.
   Lo que drizzle-kit no expresa (triggers, datos de referencia) va en migraciones `--custom`:
-  `0001_stock_mode_guards` (triggers de invariantes de stock; errores con prefijo estable `stock_bulk_level`,
+  `0004_member_avatar` (columna avatar_emoji), `0003_capitalize_names` (mayúscula inicial en nombres existentes, con mapeo manual de á/é/í/ó/ú/ü/ñ porque
+  `upper()` de SQLite solo convierte ASCII), `0001_stock_mode_guards` (triggers de invariantes de stock; errores con prefijo estable `stock_bulk_level`,
   `stock_unit_integer`, `stock_bulk_single_lot`) y `0002_reference_data` (categorías y supermercados, ids = slugs).
   La API aplica las pendientes al arrancar; en producción, antes crea `data/pre-migration-<fecha>.db`.
   Nota: la tabla `__drizzle_migrations` deja `id` en NULL; se identifica cada migración por `created_at`.
 - **Columnas**: casing `snake_case` automático (en TS se escribe camelCase). Timestamps con `mode: 'timestamp_ms'`
   (se exponen como `Date`).
-- **Inyección de dependencias**: `createApp({ db })`; los handlers leen `c.var.db`. Los servicios reciben
+- **Inyección de dependencias**: `createApp({ db, config })`; los handlers leen `c.var.db` y `c.var.config`.
+  Rutas protegidas: `new Hono<AuthEnv>().use(requireAuth)` → `c.var.user` (SessionUser con householdId).
+  **Todo acceso a datos se filtra por `c.var.user.householdId`**; un recurso de otro hogar responde 404.
+- **Errores**: la API siempre responde `{ error: { code, message, issues? } }` (`ApiErrorBody` en shared).
+  `AppError(status, code, mensaje)` para errores de dominio; los triggers de SQLite se traducen a 422 y los UNIQUE
+  a 409. Zod usa el locale español (`z.config(z.locales.es())` en API y web). En el frontend, `apiFetch` lanza
+  `ApiError`, y `call(api.x.$get())` devuelve el cuerpo de éxito ya tipado. Un 401 `unauthenticated` redirige
+  al login.
+- **Frontend**: `features/<dominio>/queries.ts` concentra consultas y mutaciones (TanStack Query) de cada dominio.
+  El router verifica la sesión con `ensureQueryData(meQuery)` y la app se monta tras `router.isReady()`.
+  Componentes base en `components/ui/`: AppButton, AppCard, TextField (con ojo en contraseñas), SegmentedControl,
+  PageHeader, EmptyState, MemberAvatar (emoji o inicial; úsalo donde se muestre una persona: quién marcó un ítem,
+  menús, colaciones) y BottomSheet (`<dialog>` nativo con showModal: foco, Escape y fondo sin librerías).
+  Selector de avatar: grilla curada `AVATAR_EMOJI_GROUPS` (shared) + campo libre; sin librería de emojis.
+  La regex `\p{RGI_Emoji}` (flag v) se construye en tiempo de ejecución con fallback: navegadores antiguos no
+  validan en el cliente y decide el servidor.
+  Barra inferior: Despensa · Lista · Escanear (botón central) · Vence · Hogar.
+  Las páginas usan `mutate(..., { onSuccess })` (o `mutateAsync` dentro de try/catch): el error se muestra
+  desde el estado de la mutación y nunca queda una promesa rechazada sin manejar.
+  Logout: `useLogout` deja `me` en null → navegar al login → `clearCachedData()` (en ese orden).
+  Sugerencias y desplegables van en el flujo normal de la página, no flotando: en el celular no deben tapar
+  botones de acción.
+- **E2E** (`e2e/`): levantan su propia API (puerto 3101, `apps/api/data/e2e.db` recreada con el seed) y su propio
+  Vite (puerto 5174; `WEB_PORT` y `API_URL` configuran vite.config), así que corren con `pnpm dev` abierto.
+  Selectores por rol y nombre accesible (`getByRole`, `getByLabel`), lo que obliga a mantener la accesibilidad.
+  `pnpm e2e:screens` guarda capturas claro/oscuro en `test-results/screens/` para revisión visual: **revisarlas
+  antes de dar por terminado un paso con cambios de UI.** Para paneles o diálogos animados usar
+  `animations: 'disabled'` en la captura, o saldrán semitransparentes. `pnpm e2e` borra `test-results/`. Las capturas `fullPage` muestran la barra inferior
+  fija a media página: es un artefacto de la captura, no un bug. Los servicios reciben
   `DbOrTx` para poder componerse dentro de una transacción (better-sqlite3 es síncrono: transacciones síncronas).
+- **Base de desarrollo** (`apps/api/data/rendi.db`): contiene datos ingresados a mano por el usuario. **Nunca
+  resetearla**; aplicar migraciones con `pnpm db:migrate`. Para verificar, usar `data/e2e.db` o una base temporal.
 - **Seed** sin códigos de barra (inventarlos podría chocar con EAN reales). Nombres de miembros ficticios.
 - **better-sqlite3 se compila desde el código fuente** con node-gyp en la instalación: el servidor necesita
   `build-essential` y `python3` antes de `pnpm install`.
@@ -196,7 +240,8 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 
 1. ✅ Andamiaje: workspace, tsconfig, lint, paquete `shared` (unidades, CLP, validación de stock por modo), API y web mínimas.
 2. ✅ Base de datos: esquema Drizzle (15 tablas), migraciones 0000–0002, seed chileno, tests de invariantes.
-3. ⏳ Auth + hogar (miembros, preferencias de niños) + shell de la app (layout, navegación).
+3. ✅ Auth (login, sesiones, CLI de usuarios) + hogar (crear/eliminar adultos y niños, preferencias acepta/rechaza
+   con notas) + shell de la app + e2e con Playwright.
 4. ⏳ Catálogo + escáner EAN (+ Open Food Facts, packs).
 5. ⏳ Despensa: lotes, acciones rápidas con deshacer, próximos a vencer.
 6. ⏳ Lista de compras: manual + automática, finalizar compra, cola offline de marcado.
@@ -209,7 +254,10 @@ pnpm install                 # instalar dependencias
 cp apps/api/.env.example apps/api/.env
 pnpm dev                     # API (:3000, tsx watch) + web (:5173, proxy /api)
 pnpm --filter @rendi/web dev:https   # web con HTTPS autofirmado (cámara desde el celular en la LAN)
-pnpm check                   # lint + typecheck + tests
+pnpm check                   # lint + typecheck + tests unitarios/integración
+pnpm e2e                     # pruebas end-to-end (Playwright, Chromium)
+pnpm e2e:screens             # capturas claro/oscuro en test-results/screens/
+pnpm exec playwright install chromium   # una vez por equipo (~115 MB en ~/.cache/ms-playwright)
 pnpm build                   # web → apps/web/dist, API → apps/api/dist/server.mjs
 pnpm --filter @rendi/api start       # arranca la API compilada
 ```
@@ -225,4 +273,13 @@ pnpm --filter @rendi/api db:reset      # borra la base, migra y siembra (no en p
 pnpm --filter @rendi/api db:studio     # explorador visual de Drizzle
 ```
 
-CLI de usuarios y despliegue: se agregan en los pasos 3 y 7.
+Cuentas (no hay registro público; piden los datos de forma interactiva):
+
+```bash
+pnpm user:create     # crea un adulto con cuenta (y el hogar, si no existe)
+pnpm user:passwd     # cambia la contraseña y cierra las sesiones de ese usuario
+pnpm user:list
+```
+
+Seed de desarrollo: usuarios `camila` y `diego`, contraseña `rendi1234`. También existen atajos en la raíz:
+`pnpm db:migrate`, `pnpm db:seed`, `pnpm db:reset`. Despliegue: se agrega en el paso 7.

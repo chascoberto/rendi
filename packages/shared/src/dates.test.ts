@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, daysBetween, toCalendarDate } from './dates'
+import { addDays, ageInYears, daysBetween, toCalendarDate } from './dates'
 
 describe('fechas de calendario', () => {
   it('usa la hora de Chile para decidir el día', () => {
@@ -16,5 +16,13 @@ describe('fechas de calendario', () => {
   it('calcula diferencias en días', () => {
     expect(daysBetween('2026-09-24', '2026-09-27')).toBe(3)
     expect(daysBetween('2026-09-24', '2026-09-20')).toBe(-4)
+  })
+})
+
+describe('ageInYears', () => {
+  it('cuenta años cumplidos', () => {
+    expect(ageInYears('2020-03-14', '2026-09-24')).toBe(6)
+    expect(ageInYears('2022-09-25', '2026-09-24')).toBe(3)
+    expect(ageInYears('2022-09-24', '2026-09-24')).toBe(4)
   })
 })

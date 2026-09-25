@@ -11,3 +11,5 @@ data/
 *.db-wal
 .DS_Store
 coverage/
+test-results/
+playwright-report/

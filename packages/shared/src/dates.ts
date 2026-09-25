@@ -36,3 +36,13 @@ export function daysBetween(from: CalendarDate, to: CalendarDate): number {
   const ms = Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)
   return Math.round(ms / 86_400_000)
 }
+
+/** Edad en años cumplidos a la fecha `today`. */
+export function ageInYears(
+  birthDate: CalendarDate,
+  today: CalendarDate = toCalendarDate(),
+): number {
+  const [by, bm, bd] = birthDate.split('-').map(Number) as [number, number, number]
+  const [ty, tm, td] = today.split('-').map(Number) as [number, number, number]
+  return ty - by - (tm < bm || (tm === bm && td < bd) ? 1 : 0)
+}

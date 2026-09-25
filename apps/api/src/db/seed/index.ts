@@ -4,9 +4,16 @@
  *   pnpm db:reset         → borra la base, migra y siembra
  */
 import { existsSync, rmSync } from 'node:fs'
-import { addDays, isBelowMinimum, normalizeSearch, toCalendarDate } from '@rendi/shared'
+import {
+  addDays,
+  capitalizeFirst,
+  isBelowMinimum,
+  normalizeSearch,
+  toCalendarDate,
+} from '@rendi/shared'
 import { v7 as uuidv7 } from 'uuid'
 import { env } from '../../env'
+import { hashPasswordSync } from '../../modules/auth/password'
 import { productDerivedFields } from '../../modules/catalog/product-fields'
 import { createHousehold } from '../../modules/household/service'
 import { createDb, type Db } from '../client'
@@ -20,10 +27,13 @@ import {
   shoppingListItems,
   stockItems,
   stockMovements,
+  users,
 } from '../schema'
-import { FOODS, HOUSEHOLD_NAME, MANUAL_LIST_ITEMS, MEMBERS, PRODUCTS } from './data'
+import { FOODS, HOUSEHOLD_NAME, MANUAL_LIST_ITEMS, MEMBERS, PRODUCTS, SEED_PASSWORD } from './data'
 
 export function seed(db: Db, today = toCalendarDate()) {
+  // Argon2 es costoso: se calcula una vez, fuera de la transacción.
+  const passwordHash = hashPasswordSync(SEED_PASSWORD)
   return db.transaction((tx) => {
     const { household, locations } = createHousehold(tx, { name: HOUSEHOLD_NAME })
     const householdId = household.id
@@ -37,7 +47,12 @@ export function seed(db: Db, today = toCalendarDate()) {
     for (const [name, categoryId] of Object.entries(FOODS)) {
       const [row] = tx
         .insert(foods)
-        .values({ householdId, name, searchText: normalizeSearch(name), categoryId })
+        .values({
+          householdId,
+          name: capitalizeFirst(name),
+          searchText: normalizeSearch(name),
+          categoryId,
+        })
         .returning({ id: foods.id })
         .all()
       foodIds.set(name, row!.id)
@@ -51,9 +66,19 @@ export function seed(db: Db, today = toCalendarDate()) {
     for (const m of MEMBERS) {
       const [member] = tx
         .insert(members)
-        .values({ householdId, name: m.name, kind: m.kind, birthDate: m.birthDate, notes: m.notes })
+        .values({
+          householdId,
+          name: m.name,
+          kind: m.kind,
+          birthDate: m.birthDate,
+          notes: m.notes,
+          avatarEmoji: m.avatarEmoji,
+        })
         .returning({ id: members.id })
         .all()
+      if (m.username) {
+        tx.insert(users).values({ memberId: member!.id, username: m.username, passwordHash }).run()
+      }
       const prefs = [
         ...(m.accepts ?? []).map((food) => ({ food, stance: 'accepts' as const, notes: null })),
         ...(m.rejects ?? []).map((r) =>
@@ -186,6 +211,8 @@ function main() {
   for (const t of ['members', 'foods', 'products', 'stock_items', 'shopping_list_items']) {
     console.log(`  ${t.padEnd(20)} ${count(t)}`)
   }
+  const usernames = MEMBERS.flatMap((m) => m.username ?? [])
+  console.log(`Cuentas: ${usernames.join(', ')} · contraseña: ${SEED_PASSWORD}`)
   db.$client.close()
 }
 

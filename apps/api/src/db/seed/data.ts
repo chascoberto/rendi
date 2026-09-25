@@ -113,21 +113,28 @@ export const PRODUCTS: SeedProduct[] = [
   { name: 'Pasta dental infantil', brand: 'Colgate', category: 'higiene', amount: 50, unit: 'g', location: 'Despensa', lots: [{ quantity: 1 }] },
 ]
 
+/** Contraseña de las cuentas de ejemplo (solo desarrollo). */
+export const SEED_PASSWORD = 'rendi1234'
+
 export interface SeedMember {
   name: string
+  /** Solo adultos: crea una cuenta con este usuario y `SEED_PASSWORD`. */
+  username?: string
   kind: 'adult' | 'child'
   birthDate?: string
   notes?: string
+  avatarEmoji?: string
   accepts?: string[]
   rejects?: (string | { food: string; notes: string })[]
 }
 
 export const MEMBERS: SeedMember[] = [
-  { name: 'Camila', kind: 'adult' },
-  { name: 'Diego', kind: 'adult' },
+  { name: 'Camila', kind: 'adult', username: 'camila', avatarEmoji: '🌻' },
+  { name: 'Diego', kind: 'adult', username: 'diego', avatarEmoji: '☕' },
   {
     name: 'Sofía',
     kind: 'child',
+    avatarEmoji: '🦄',
     birthDate: '2020-03-14',
     notes: 'Come verduras solo si van molidas en la salsa o en puré.',
     accepts: ['arroz', 'fideos', 'pollo', 'plátano', 'manzana', 'yogur', 'palta', 'huevo'],
@@ -136,6 +143,7 @@ export const MEMBERS: SeedMember[] = [
   {
     name: 'Tomás',
     kind: 'child',
+    avatarEmoji: '🦖',
     birthDate: '2022-05-02',
     notes: 'No le gusta que los alimentos se toquen en el plato.',
     accepts: ['fideos', 'vienesas', 'huevo', 'plátano', 'leche', 'pan', 'quesillo'],

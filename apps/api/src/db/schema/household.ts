@@ -23,6 +23,8 @@ export const members = sqliteTable(
     kind: text({ enum: ['adult', 'child'] }).notNull(),
     birthDate: calendarDate(),
     notes: text(),
+    /** Emoji de avatar (uno solo, validado con `avatarEmojiSchema`); null = inicial del nombre. */
+    avatarEmoji: text(),
     /** Perfil alimentario (Fase 5). JSON libre hasta que se defina su forma. */
     dietProfile: text({ mode: 'json' }),
     createdAt: createdAt(),

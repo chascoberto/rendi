@@ -13,7 +13,7 @@ const applied = runMigrations(db, {
 })
 if (applied > 0) console.log(`Migraciones aplicadas: ${applied}`)
 
-const app = createApp({ db })
+const app = createApp({ db, config: { cookieSecure: env.COOKIE_SECURE } })
 
 const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
   console.log(`Rendi API escuchando en http://${info.address}:${info.port}`)

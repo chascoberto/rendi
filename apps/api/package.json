@@ -15,10 +15,15 @@
     "db:migrate": "tsx --env-file-if-exists=.env src/db/migrate-cli.ts",
     "db:seed": "tsx --env-file-if-exists=.env src/db/seed/index.ts",
     "db:reset": "tsx --env-file-if-exists=.env src/db/seed/index.ts --reset",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "user:create": "tsx --env-file-if-exists=.env src/cli/users.ts create",
+    "user:passwd": "tsx --env-file-if-exists=.env src/cli/users.ts passwd",
+    "user:list": "tsx --env-file-if-exists=.env src/cli/users.ts list"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@hono/zod-validator": "^0.9.1",
+    "@node-rs/argon2": "^2.2.1",
     "@rendi/shared": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.3",

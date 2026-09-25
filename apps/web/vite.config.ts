@@ -11,9 +11,11 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     host: true,
-    port: 5173,
+    port: Number(process.env.WEB_PORT ?? 5173),
+    strictPort: true,
     proxy: {
-      '/api': 'http://127.0.0.1:3000',
+      // Configurable para que las pruebas e2e usen su propia API sin chocar con `pnpm dev`.
+      '/api': process.env.API_URL ?? 'http://127.0.0.1:3000',
     },
   },
 }))

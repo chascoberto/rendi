@@ -22,6 +22,20 @@
       "when": 1790277963635,
       "tag": "0002_reference_data",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790366077497,
+      "tag": "0003_capitalize_names",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790367339506,
+      "tag": "0004_member_avatar",
+      "breakpoints": true
     }
   ]
 }

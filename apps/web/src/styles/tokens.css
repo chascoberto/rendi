@@ -4,6 +4,7 @@
  */
 :root {
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 
   --space-1: 4px;
   --space-2: 8px;

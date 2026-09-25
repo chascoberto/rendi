@@ -7,9 +7,11 @@ const EnvSchema = z.object({
   DATABASE_PATH: z.string().default('./data/rendi.db'),
   /** Rutas relativas al directorio de trabajo (apps/api, también en systemd). */
   MIGRATIONS_DIR: z.string().default('./drizzle'),
+  /** Cookie de sesión solo por HTTPS. Por defecto: sí en producción, no en desarrollo. */
+  COOKIE_SECURE: z.stringbool().optional(),
 })
 
-export type Env = z.infer<typeof EnvSchema>
+export type Env = z.infer<typeof EnvSchema> & { COOKIE_SECURE: boolean }
 
 function loadEnv(): Env {
   const parsed = EnvSchema.safeParse(process.env)
@@ -17,7 +19,10 @@ function loadEnv(): Env {
     console.error('Configuración inválida:', z.prettifyError(parsed.error))
     process.exit(1)
   }
-  return parsed.data
+  return {
+    ...parsed.data,
+    COOKIE_SECURE: parsed.data.COOKIE_SECURE ?? parsed.data.NODE_ENV === 'production',
+  }
 }
 
 export const env = loadEnv()

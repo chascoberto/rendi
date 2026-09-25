@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isValidEan, isVariableMeasureEan } from './barcode'
-import { normalizeSearch } from './text'
+import { capitalizeFirst, capitalizePersonName, normalizeSearch } from './text'
 
 describe('normalizeSearch', () => {
   it('quita tildes, mayúsculas y espacios extra', () => {
@@ -25,5 +25,30 @@ describe('isValidEan', () => {
   it('detecta códigos de peso variable', () => {
     expect(isVariableMeasureEan('2012345012345')).toBe(true)
     expect(isVariableMeasureEan('7801234567890')).toBe(false)
+  })
+})
+
+describe('capitalizeFirst', () => {
+  it('pone mayúscula solo a la primera letra, incluidas tildes y ñ', () => {
+    expect(capitalizeFirst('  camila ')).toBe('Camila')
+    expect(capitalizeFirst('ñandú')).toBe('Ñandú')
+    expect(capitalizeFirst('ángela')).toBe('Ángela')
+    expect(capitalizeFirst('zapallo italiano')).toBe('Zapallo italiano')
+    expect(capitalizeFirst('Zapallo')).toBe('Zapallo')
+    expect(capitalizeFirst('')).toBe('')
+  })
+})
+
+describe('capitalizePersonName', () => {
+  it('pone mayúscula a cada palabra', () => {
+    expect(capitalizePersonName('maría josé')).toBe('María José')
+    expect(capitalizePersonName('  tomás   ignacio ')).toBe('Tomás Ignacio')
+    expect(capitalizePersonName('ñuño')).toBe('Ñuño')
+  })
+
+  it('deja las partículas en minúscula salvo al comienzo', () => {
+    expect(capitalizePersonName('maría de los ángeles')).toBe('María de los Ángeles')
+    expect(capitalizePersonName('ana-maría DE LA cruz')).toBe('Ana-María de la Cruz')
+    expect(capitalizePersonName('de la fuente')).toBe('De la Fuente')
   })
 })

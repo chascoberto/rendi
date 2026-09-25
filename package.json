@@ -9,14 +9,23 @@
   "scripts": {
     "dev": "pnpm --parallel --filter @rendi/api --filter @rendi/web dev",
     "build": "pnpm --filter @rendi/web build && pnpm --filter @rendi/api build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p e2e",
     "test": "pnpm -r test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "db:migrate": "pnpm --filter @rendi/api db:migrate",
+    "db:seed": "pnpm --filter @rendi/api db:seed",
+    "db:reset": "pnpm --filter @rendi/api db:reset",
+    "user:create": "pnpm --filter @rendi/api user:create",
+    "user:passwd": "pnpm --filter @rendi/api user:passwd",
+    "user:list": "pnpm --filter @rendi/api user:list",
+    "e2e": "playwright test",
+    "e2e:screens": "SCREENS=1 playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.19.0",
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
