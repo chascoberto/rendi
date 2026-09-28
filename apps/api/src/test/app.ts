@@ -1,4 +1,4 @@
-import { createApp } from '../app'
+import { createApp, type AppDeps } from '../app'
 import type { Db } from '../db/client'
 import { hashPasswordSync } from '../modules/auth/password'
 import { createAdultUser } from '../modules/auth/service'
@@ -21,9 +21,9 @@ export function createTestHousehold(db: Db, username = 'adulto', name = 'Hogar d
 }
 
 /** App sobre una base en memoria, con helpers para requests JSON autenticados. */
-export function createTestApp() {
+export function createTestApp(overrides: Pick<AppDeps, 'productLookup'> = {}) {
   const db = createTestDb()
-  const app = createApp({ db, config: { cookieSecure: false }, logRequests: false })
+  const app = createApp({ db, config: { cookieSecure: false }, logRequests: false, ...overrides })
 
   async function request(
     path: string,

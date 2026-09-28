@@ -1,6 +1,7 @@
 import { dirname } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createApp } from './app'
+import { openFoodFactsLookup } from './modules/catalog/lookup/openfoodfacts'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
 import { env } from './env'
@@ -13,7 +14,11 @@ const applied = runMigrations(db, {
 })
 if (applied > 0) console.log(`Migraciones aplicadas: ${applied}`)
 
-const app = createApp({ db, config: { cookieSecure: env.COOKIE_SECURE } })
+const app = createApp({
+  db,
+  config: { cookieSecure: env.COOKIE_SECURE },
+  productLookup: env.OPEN_FOOD_FACTS ? openFoodFactsLookup() : undefined,
+})
 
 const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
   console.log(`Rendi API escuchando en http://${info.address}:${info.port}`)

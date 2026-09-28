@@ -33,5 +33,7 @@ describe('formato', () => {
   it('usa formato chileno', () => {
     expect(formatClp(1990)).toBe('$1.990')
     expect(formatContent(1.5, 'kg')).toBe('1,5 kg')
+    expect(formatContent(1, 'u')).toBe('1 unidad')
+    expect(formatContent(12, 'u')).toBe('12 unidades')
   })
 })

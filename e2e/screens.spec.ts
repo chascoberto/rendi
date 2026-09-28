@@ -15,7 +15,21 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await shot('login')
 
       await login(page)
+      await page.getByRole('list', { name: 'Productos' }).waitFor()
       await shot('despensa')
+      await page.getByRole('link', { name: /Leche entera/ }).click()
+      await page.getByRole('heading', { name: 'Códigos de barra' }).waitFor()
+      await shot('producto')
+      await page.goto('/escanear')
+      await page.getByRole('button', { name: 'Ingresar código a mano' }).click()
+      await page.getByLabel('Código de barras').fill('9780201379624')
+      await page.getByRole('button', { name: 'Buscar' }).click()
+      await page.getByRole('dialog').getByText('no está en tu catálogo').waitFor()
+      await page.screenshot({
+        path: `test-results/screens/${colorScheme}-escaneo.png`,
+        animations: 'disabled',
+      })
+      await page.goto('/')
       await page.getByRole('link', { name: 'Hogar' }).click()
       await page.getByRole('link', { name: /Sofía/ }).waitFor()
       await shot('hogar')

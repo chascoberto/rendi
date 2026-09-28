@@ -13,11 +13,14 @@
   "dependencies": {
     "@rendi/shared": "workspace:*",
     "@tanstack/vue-query": "^5.103.2",
+    "@vueuse/core": "^15.0.0",
+    "barcode-detector": "^3.2.2",
     "hono": "^4.13.9",
     "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.43",
     "vue-router": "^5.3.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "zxing-wasm": "3.1.3"
   },
   "devDependencies": {
     "@rendi/api": "workspace:*",

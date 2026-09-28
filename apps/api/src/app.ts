@@ -8,6 +8,8 @@ import { handleError, notFound } from './lib/errors'
 import { authRoutes } from './modules/auth/routes'
 import { catalogRoutes } from './modules/catalog/routes'
 import { householdRoutes } from './modules/household/routes'
+import { noopLookup, type ProductLookup } from './modules/catalog/lookup/types'
+import { pantryRoutes } from './modules/pantry/routes'
 import { systemRoutes } from './modules/system/routes'
 
 z.config(z.locales.es())
@@ -15,6 +17,8 @@ z.config(z.locales.es())
 export interface AppDeps {
   db: Db
   config: AppConfig
+  /** Búsqueda externa por código de barras; sin ella, los códigos desconocidos no traen sugerencia. */
+  productLookup?: ProductLookup
   /** Log de cada request (desactivado en tests). */
   logRequests?: boolean
 }
@@ -28,6 +32,7 @@ export function createApp(deps: AppDeps) {
     .use(async (c, next) => {
       c.set('db', deps.db)
       c.set('config', deps.config)
+      c.set('productLookup', deps.productLookup ?? noopLookup)
       await next()
     })
     .use(csrfProtection)
@@ -37,6 +42,7 @@ export function createApp(deps: AppDeps) {
     .route('/auth', authRoutes)
     .route('/household', householdRoutes)
     .route('/catalog', catalogRoutes)
+    .route('/pantry', pantryRoutes)
 }
 
 export type AppType = ReturnType<typeof createApp>

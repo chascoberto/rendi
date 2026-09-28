@@ -28,8 +28,13 @@ Se usa principalmente desde el celular, incluso dentro del supermercado.
   TS 7 (compilador nativo) no es compatible con typescript-eslint (`<6.1.0`) ni está garantizado con vue-tsc.
   Revisar al actualizar dependencias.
 - **Frontend** `apps/web`: Vue 3 + Vite 8 + TypeScript, Vue Router 5, TanStack Query (estado del servidor),
-  lucide-vue-next (íconos). Sin Pinia por ahora: todo el estado es del servidor; se agrega si aparece estado
-  local compartido (p. ej. la cola offline). Por agregar: `barcode-detector` (paso 4), vite-plugin-pwa (paso 7).
+  lucide-vue-next (íconos), @vueuse/core. Sin Pinia por ahora: todo el estado es del servidor; se agrega si
+  aparece estado local compartido (p. ej. la cola offline). Por agregar: vite-plugin-pwa (paso 7).
+- **Escáner**: `barcode-detector` (ponyfill) + `zxing-wasm` 3.1.3 (misma versión que usa barcode-detector).
+  `features/scanner/detector.ts` usa la API nativa si trae EAN (Chrome Android) y si no el ponyfill; el
+  `.wasm` se importa con `?url` y se sirve desde la app (nunca CDN: debe funcionar sin internet).
+  Formatos: ean_13, ean_8, upc_a. Un código se acepta tras leerlo 2 veces seguidas; vibra y pausa.
+  La cámara exige HTTPS (o localhost); sin ella el componente ofrece ingreso manual.
 - **Backend** `apps/api`: Hono sobre `@hono/node-server`. Validación con Zod 4 (`@hono/zod-validator`).
   Build con tsdown → `dist/server.mjs` (las dependencias npm quedan externas; `@rendi/*` se incluye en el bundle).
 - **Base de datos**: SQLite con better-sqlite3 + Drizzle ORM; migraciones SQL versionadas con drizzle-kit (paso 2).
@@ -107,7 +112,7 @@ en su propia migración.
 - `users` (member_id único, username, password_hash) · `sessions` (id = sha256 del token, user_id, expires_at)
 - `member_food_prefs` (member_id, food_id, stance `accepts|rejects`, notes)
 
-**Catálogo**
+**Catálogo** (API en `modules/catalog`: products.ts, foods.ts, lookup/)
 
 - `categories` (globales) · `foods` (alimento genérico: "leche", "brócoli"; lo que usan preferencias y recetas)
 - `products` (SKU concreto: name, brand, food_id?, category_id?, content_amount + content_unit `g|kg|ml|L|u`,
@@ -174,6 +179,16 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 - **`foods` separado de `products`**: preferencias, recetas y "¿hay leche?" trabajan sobre alimentos genéricos.
 - **Packs en el código de barras o en la observación de precio**, no como productos duplicados.
 - **`members` unificado** para adultos y niños (porciones y variantes de menú sobre una sola tabla).
+- **Búsqueda externa por código** (`modules/catalog/lookup/`): interfaz `ProductLookup` inyectada en
+  `createApp({ productLookup })` y disponible como `c.var.productLookup`. Implementación: Open Food Facts
+  (consulta desde el servidor, timeout 2,5 s, caché 24 h en memoria, nunca lanza). `OPEN_FOOD_FACTS=false` la
+  desactiva (las e2e la desactivan). Mismo patrón que tendrán las fuentes de precio.
+- **Productos**: se archivan (`archived_at`), no se borran, para conservar historial. La búsqueda acepta
+  texto sin tildes o un EAN exacto. Cambio de modo con stock: `pantry/service.convertStockMode` en la misma
+  transacción (unit→bulk antes de cambiar el modo: consolida en un lote nivel 2/0; bulk→unit después: exige
+  `unitCount` si había stock).
+- **Pendiente para el paso 6**: al cambiar `min_stock` de un producto (o su stock) debe re-evaluarse la regla de
+  la lista automática. Hoy `updateProduct` no llama a `shopping`; hacerlo cuando exista ese servicio.
 - **Fuentes de precio intercambiables** (futuro): interfaz `PriceSource` en `modules/prices/sources/`,
   todas escriben en `price_observations`.
 - **Migraciones**: se generan con drizzle-kit y se commitean; **nunca editar una migración ya aplicada**, crear otra.
@@ -207,6 +222,9 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   Logout: `useLogout` deja `me` en null → navegar al login → `clearCachedData()` (en ese orden).
   Sugerencias y desplegables van en el flujo normal de la página, no flotando: en el celular no deben tapar
   botones de acción.
+- **E2E del escáner**: proyecto Playwright `scanner` con cámara falsa de Chromium. `e2e/global-setup.ts` genera
+  (con zxing-wasm/writer + **ffmpeg**) un video `.y4m` con el EAN `4006381333931` en `e2e/.generated/`. La
+  prueba bloquea jsdelivr/unpkg para garantizar que el WASM sale de la app. El resto va en el proyecto `mobile`.
 - **E2E** (`e2e/`): levantan su propia API (puerto 3101, `apps/api/data/e2e.db` recreada con el seed) y su propio
   Vite (puerto 5174; `WEB_PORT` y `API_URL` configuran vite.config), así que corren con `pnpm dev` abierto.
   Selectores por rol y nombre accesible (`getByRole`, `getByLabel`), lo que obliga a mantener la accesibilidad.
@@ -242,7 +260,7 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 2. ✅ Base de datos: esquema Drizzle (15 tablas), migraciones 0000–0002, seed chileno, tests de invariantes.
 3. ✅ Auth (login, sesiones, CLI de usuarios) + hogar (crear/eliminar adultos y niños, preferencias acepta/rechaza
    con notas) + shell de la app + e2e con Playwright.
-4. ⏳ Catálogo + escáner EAN (+ Open Food Facts, packs).
+4. ✅ Catálogo (crear/editar/archivar, búsqueda, códigos con packs) + escáner EAN (cámara + manual) + Open Food Facts.
 5. ⏳ Despensa: lotes, acciones rápidas con deshacer, próximos a vencer.
 6. ⏳ Lista de compras: manual + automática, finalizar compra, cola offline de marcado.
 7. ⏳ PWA + despliegue: manifest, service worker, build, `rendi.service`, respaldo con cron, README completo.
@@ -258,6 +276,7 @@ pnpm check                   # lint + typecheck + tests unitarios/integración
 pnpm e2e                     # pruebas end-to-end (Playwright, Chromium)
 pnpm e2e:screens             # capturas claro/oscuro en test-results/screens/
 pnpm exec playwright install chromium   # una vez por equipo (~115 MB en ~/.cache/ms-playwright)
+# las e2e del escáner requieren ffmpeg instalado en el sistema
 pnpm build                   # web → apps/web/dist, API → apps/api/dist/server.mjs
 pnpm --filter @rendi/api start       # arranca la API compilada
 ```

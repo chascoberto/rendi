@@ -3,7 +3,8 @@ import { normalizeSearch, type FoodStance } from '@rendi/shared'
 import { Plus, ThumbsDown, ThumbsUp } from 'lucide-vue-next'
 import { computed, ref, useId } from 'vue'
 import { errorMessage } from '@/lib/api'
-import { useFoodPrefMutations, useFoodSearch } from './queries'
+import { useFoodSearch } from '@/features/catalog/queries'
+import { useFoodPrefMutations } from './queries'
 
 const props = defineProps<{ memberId: string; existing: string[] }>()
 

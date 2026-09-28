@@ -5,7 +5,7 @@ import type {
   FoodPrefUpdateInput,
   MemberUpdateInput,
 } from '@rendi/shared'
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery } from '@tanstack/vue-query'
 import { computed, type MaybeRefOrGetter, toValue } from 'vue'
 import { api, call } from '@/lib/api'
 import { queryClient } from '@/lib/query'
@@ -13,7 +13,6 @@ import { queryClient } from '@/lib/query'
 const keys = {
   household: ['household'] as const,
   member: (id: string) => ['household', 'member', id] as const,
-  foods: (q: string) => ['catalog', 'foods', q] as const,
 }
 
 export function useHousehold() {
@@ -29,17 +28,6 @@ export function useMember(id: MaybeRefOrGetter<string>) {
 
 export type MemberDetail = NonNullable<ReturnType<typeof useMember>['data']['value']>
 export type FoodPref = MemberDetail['prefs'][number]
-
-export function useFoodSearch(query: MaybeRefOrGetter<string>) {
-  return useQuery({
-    queryKey: computed(() => keys.foods(toValue(query).trim())),
-    queryFn: () =>
-      call(api.catalog.foods.$get({ query: { q: toValue(query).trim(), limit: '6' } })),
-    enabled: computed(() => toValue(query).trim().length > 0),
-    placeholderData: keepPreviousData,
-    staleTime: 60_000,
-  })
-}
 
 const invalidateHousehold = () => queryClient.invalidateQueries({ queryKey: keys.household })
 

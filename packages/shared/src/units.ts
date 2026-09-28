@@ -52,8 +52,9 @@ export function unitPrice(
   return { amount: (priceClp / (base.quantity * packCount)) * perBase, unit }
 }
 
-/** Texto legible del contenido neto: "1 L", "500 g", "12 unidades". */
+/** Texto legible del contenido neto: "1 L", "500 g", "1 unidad", "12 unidades". */
 export function formatContent(amount: number, unit: ContentUnit): string {
   const n = new Intl.NumberFormat('es-CL', { maximumFractionDigits: 3 }).format(amount)
-  return `${n} ${CONTENT_UNIT_LABELS[unit]}`
+  const label = unit === 'u' && amount === 1 ? 'unidad' : CONTENT_UNIT_LABELS[unit]
+  return `${n} ${label}`
 }

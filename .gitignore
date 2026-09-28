@@ -13,3 +13,4 @@ data/
 coverage/
 test-results/
 playwright-report/
+e2e/.generated/

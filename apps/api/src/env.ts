@@ -9,6 +9,8 @@ const EnvSchema = z.object({
   MIGRATIONS_DIR: z.string().default('./drizzle'),
   /** Cookie de sesión solo por HTTPS. Por defecto: sí en producción, no en desarrollo. */
   COOKIE_SECURE: z.stringbool().optional(),
+  /** Consultar Open Food Facts al escanear un código desconocido. */
+  OPEN_FOOD_FACTS: z.stringbool().default(true),
 })
 
 export type Env = z.infer<typeof EnvSchema> & { COOKIE_SECURE: boolean }

@@ -46,6 +46,19 @@ export const router = createRouter({
       meta: { tab: 'expiring' },
     },
     {
+      path: '/productos/nuevo',
+      name: 'product-new',
+      component: () => import('@/features/catalog/ProductFormPage.vue'),
+      meta: { tab: 'pantry' },
+    },
+    {
+      path: '/productos/:id',
+      name: 'product',
+      component: () => import('@/features/catalog/ProductFormPage.vue'),
+      meta: { tab: 'pantry' },
+      props: true,
+    },
+    {
       path: '/hogar',
       name: 'household',
       component: () => import('@/features/household/HouseholdPage.vue'),

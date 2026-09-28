@@ -13,6 +13,7 @@ const props = defineProps<{
   required?: boolean
   max?: string
   autocapitalize?: 'off' | 'sentences' | 'words'
+  inputmode?: 'text' | 'numeric' | 'decimal' | 'search'
 }>()
 
 const model = defineModel<string>({ default: '' })
@@ -49,6 +50,7 @@ const inputType = computed(() =>
         :placeholder="placeholder"
         :required="required"
         :max="max"
+        :inputmode="inputmode"
         :aria-invalid="!!error || undefined"
         :autocapitalize="isPassword ? 'off' : autocapitalize"
         :spellcheck="isPassword ? false : undefined"
