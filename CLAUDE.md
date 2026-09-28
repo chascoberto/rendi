@@ -28,8 +28,8 @@ Se usa principalmente desde el celular, incluso dentro del supermercado.
   TS 7 (compilador nativo) no es compatible con typescript-eslint (`<6.1.0`) ni está garantizado con vue-tsc.
   Revisar al actualizar dependencias.
 - **Frontend** `apps/web`: Vue 3 + Vite 8 + TypeScript, Vue Router 5, TanStack Query (estado del servidor),
-  lucide-vue-next (íconos), @vueuse/core. Sin Pinia por ahora: todo el estado es del servidor; se agrega si
-  aparece estado local compartido (p. ej. la cola offline). Por agregar: vite-plugin-pwa (paso 7).
+  lucide-vue-next (íconos), @vueuse/core. Sin Pinia: el estado local compartido (toasts, cola offline) son
+  módulos con `ref` a nivel de módulo. Por agregar: vite-plugin-pwa (paso 7).
 - **Escáner**: `barcode-detector` (ponyfill) + `zxing-wasm` 3.1.3 (misma versión que usa barcode-detector).
   `features/scanner/detector.ts` usa la API nativa si trae EAN (Chrome Android) y si no el ponyfill; el
   `.wasm` se importa con `?url` y se sirve desde la app (nunca CDN: debe funcionar sin internet).
@@ -198,9 +198,15 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   el nivel en Hay. Deshacer marca `undone_at` y revierte los deltas; el servidor lo acepta hasta 10 min
   (`UNDO_WINDOW_MS`) y responde 409 `undo_conflict` si el resultado ya no es válido. Los lotes en 0 no se
   borran (se ocultan). "Por vencer" = lotes con stock y vencimiento hasta hoy + 30 días, incluidos los vencidos.
-- **Pendiente para el paso 6**: al cambiar `min_stock` de un producto o tras cada acción de stock (incluido
-  deshacer) debe re-evaluarse la regla de la lista automática. Hoy ni `updateProduct` ni `pantry/stock` llaman a
-  `shopping`; el punto natural es `createAction().result()` en `pantry/stock.ts` y `undoAction`.
+- **Lista de compras** (`modules/shopping`): `auto.ts` = regla del mínimo (`syncMinStockItem`), sin
+  dependencias: quien la llama entrega el mínimo y el stock total. La llaman `catalog/products` (crear, editar,
+  archivar) y `pantry/stock` (cada acción y deshacer, vía `settle`). No duplica: si el producto ya está en la
+  lista como ítem manual, no agrega el automático. Si alguien borra un ítem automático y el producto sigue bajo
+  el mínimo, vuelve con el próximo movimiento. `service.ts` = lista (nombres vía catalog/household), agregar
+  (409 `already_listed` si el producto o alimento ya está), editar, quitar, marcar y finalizar. Marcar: última
+  escritura gana según `at` del cliente (un `at` futuro se limita a ahora). Finalizar: primero cierra los ítems
+  (`purchase_id`) y después pasa los productos al stock con `pantry/stock.purchase(..., purchaseId)`; cantidad =
+  `quantities[itemId]` ?? cantidad del ítem ?? 1 (la UI sugiere lo que falta para el mínimo).
 - **Fuentes de precio intercambiables** (futuro): interfaz `PriceSource` en `modules/prices/sources/`,
   todas escriben en `price_observations`.
 - **Migraciones**: se generan con drizzle-kit y se commitean; **nunca editar una migración ya aplicada**, crear otra.
@@ -231,6 +237,11 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   Barra inferior: Despensa · Lista · Escanear (botón central) · Vence · Hogar.
   Las páginas usan `mutate(..., { onSuccess })` (o `mutateAsync` dentro de try/catch): el error se muestra
   desde el estado de la mutación y nunca queda una promesa rechazada sin manejar.
+  Lista: `features/shopping/checkQueue.ts` es la cola offline (estado de módulo + localStorage, sin Pinia):
+  cada toque guarda `{ checked, at }` por ítem y se envía al instante, al volver la red y cada 15 s; `401`/sin
+  red la conservan, otro error la descarta. `useShoppingList` superpone las marcas pendientes (ícono "Sin
+  sincronizar"). Finalizar vacía la cola antes. La lista se refresca cada 10 s (varios compradores).
+  `clearCachedData` también vacía la cola (las marcas son de quien salió).
   Toasts: `showToast` (`composables/useToast.ts`) + `ToastHost` en App.vue (región `status` "Aviso", 5 s).
   Las mutaciones de stock (`features/pantry/queries.ts`, `useStockAction`) muestran "Deshacer" si hay `actionId`.
   Ojo: un toast queda detrás de un `BottomSheet` abierto (top layer): cerrar el panel al terminar la acción.
@@ -277,7 +288,7 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
    con notas) + shell de la app + e2e con Playwright.
 4. ✅ Catálogo (crear/editar/archivar, búsqueda, códigos con packs) + escáner EAN (cámara + manual) + Open Food Facts.
 5. ✅ Despensa: lotes (FEFO, ajuste manual), acciones rápidas con deshacer (detalle, lista y escáner), por vencer.
-6. ⏳ Lista de compras: manual + automática, finalizar compra, cola offline de marcado.
+6. ✅ Lista de compras: manual + automática (stock mínimo), varios compradores, finalizar compra, cola offline.
 7. ⏳ PWA + despliegue: manifest, service worker, build, `rendi.service`, respaldo con cron, README completo.
 
 ## Comandos

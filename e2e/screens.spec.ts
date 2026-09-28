@@ -40,6 +40,20 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('link', { name: /Plátano/ }).click()
       await page.getByRole('radiogroup', { name: 'Nivel' }).waitFor()
       await shot('granel')
+      await page.goto('/lista')
+      await page.getByRole('checkbox', { name: 'Pan amasado' }).waitFor()
+      // Marca y desmarca en la misma pasada, para no alterar la otra.
+      await page.getByRole('checkbox', { name: 'Velas de cumpleaños' }).click()
+      await page.getByRole('button', { name: /Finalizar compra/ }).waitFor()
+      await shot('lista')
+      await page.getByRole('button', { name: /Finalizar compra/ }).click()
+      await page.getByRole('dialog', { name: 'Finalizar compra' }).waitFor()
+      await page.screenshot({
+        path: `test-results/screens/${colorScheme}-finalizar.png`,
+        animations: 'disabled',
+      })
+      await page.keyboard.press('Escape')
+      await page.getByRole('checkbox', { name: 'Velas de cumpleaños' }).click()
       await page.goto('/vencimientos')
       await page
         .getByRole('heading', { name: 'Vencidos' })

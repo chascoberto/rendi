@@ -2,6 +2,7 @@ import { VueQueryPlugin } from '@tanstack/vue-query'
 import { createApp } from 'vue'
 import { z } from 'zod'
 import App from './App.vue'
+import { startCheckQueue } from './features/shopping/checkQueue'
 import { setUnauthenticatedHandler } from './lib/api'
 import { queryClient } from './lib/query'
 import { router } from './router'
@@ -22,3 +23,4 @@ setUnauthenticatedHandler(() => {
 const app = createApp(App).use(VueQueryPlugin, { queryClient }).use(router)
 // Montar tras la primera navegación evita mostrar la barra inferior antes de saber si hay sesión.
 void router.isReady().then(() => app.mount('#app'))
+startCheckQueue()

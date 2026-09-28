@@ -17,6 +17,7 @@ import type { DbOrTx } from '../../db/client'
 import { locations, stockItems, stockMovements } from '../../db/schema'
 import { AppError, badRequest, notFound } from '../../lib/errors'
 import { getProductRef, listProductRefs, type ProductRef } from '../catalog/products'
+import { syncMinStockItem } from '../shopping/auto'
 import { assertLocation, fefoOrder, getStockSummary, listLocations } from './service'
 
 /** El servidor acepta deshacer por un rato más que el toast, por si la red tarda. */
@@ -30,8 +31,24 @@ export interface Actor {
   userId: string
 }
 
-/** Acumula los movimientos de una acción. `actionId` queda en null si nada cambió. */
-function createAction(tx: DbOrTx, actor: Actor, productId: string) {
+/** Stock actual del producto, tras re-evaluar su ítem automático en la lista de compras. */
+function settle(tx: DbOrTx, householdId: string, product: ProductRef) {
+  const stock = getStockSummary(tx, product.id)
+  syncMinStockItem(tx, householdId, product, stock.total)
+  return stock
+}
+
+/**
+ * Acumula los movimientos de una acción. `actionId` queda en null si nada cambió.
+ * `purchaseId` enlaza los movimientos con una compra finalizada desde la lista.
+ */
+function createAction(
+  tx: DbOrTx,
+  actor: Actor,
+  product: ProductRef,
+  purchaseId: string | null = null,
+) {
+  const productId = product.id
   const actionId = uuidv7()
   let changed = false
   return {
@@ -41,12 +58,20 @@ function createAction(tx: DbOrTx, actor: Actor, productId: string) {
       if (delta === 0) return
       tx.update(stockItems).set({ quantity }).where(eq(stockItems.id, lot.id)).run()
       tx.insert(stockMovements)
-        .values({ actionId, productId, stockItemId: lot.id, delta, reason, userId: actor.userId })
+        .values({
+          actionId,
+          productId,
+          stockItemId: lot.id,
+          delta,
+          reason,
+          userId: actor.userId,
+          purchaseId,
+        })
         .run()
       changed = true
     },
     result() {
-      return { actionId: changed ? actionId : null, stock: getStockSummary(tx, productId) }
+      return { actionId: changed ? actionId : null, stock: settle(tx, actor.householdId, product) }
     },
   }
 }
@@ -114,7 +139,7 @@ export function consumeOne(db: DbOrTx, actor: Actor, productId: string, target: 
     if (!lot || lot.quantity <= 0) {
       throw new AppError(409, 'out_of_stock', 'No queda stock de este producto')
     }
-    const action = createAction(tx, actor, productId)
+    const action = createAction(tx, actor, product)
     action.set(lot, lot.quantity - 1, 'consume')
     return action.result()
   })
@@ -123,9 +148,9 @@ export function consumeOne(db: DbOrTx, actor: Actor, productId: string, target: 
 /** "Se acabó": deja en cero el lote indicado o todos los del producto (a granel: nivel "Se acabó"). */
 export function deplete(db: DbOrTx, actor: Actor, productId: string, target: LotTarget) {
   return db.transaction((tx) => {
-    getProductRef(tx, actor.householdId, productId)
+    const product = getProductRef(tx, actor.householdId, productId)
     const lots = target.lotId ? [findLot(tx, productId, target.lotId)] : productLots(tx, productId)
-    const action = createAction(tx, actor, productId)
+    const action = createAction(tx, actor, product)
     for (const lot of lots) action.set(lot, BULK_LEVELS.empty, 'depleted')
     return action.result()
   })
@@ -133,12 +158,18 @@ export function deplete(db: DbOrTx, actor: Actor, productId: string, target: Lot
 
 /**
  * "Compré". En `unit` suma envases a un lote igual (misma ubicación y vencimiento, sin abrir)
- * o crea uno nuevo. En `bulk` deja el único lote en "Hay".
+ * o crea uno nuevo. En `bulk` deja el único lote en "Hay". `purchaseId`: compra de la lista.
  */
-export function purchase(db: DbOrTx, actor: Actor, productId: string, input: PurchaseInput) {
+export function purchase(
+  db: DbOrTx,
+  actor: Actor,
+  productId: string,
+  input: PurchaseInput,
+  purchaseId: string | null = null,
+) {
   return db.transaction((tx) => {
     const product = getProductRef(tx, actor.householdId, productId)
-    const action = createAction(tx, actor, productId)
+    const action = createAction(tx, actor, product, purchaseId)
 
     if (product.stockMode === 'bulk') {
       const lot =
@@ -180,7 +211,7 @@ export function setBulkLevel(db: DbOrTx, actor: Actor, productId: string, level:
     if (product.stockMode !== 'bulk') {
       throw badRequest('unit_has_count', 'Este producto se cuenta por envases')
     }
-    const action = createAction(tx, actor, productId)
+    const action = createAction(tx, actor, product)
     let lot = productLots(tx, productId, false)[0]
     if (!lot) {
       if (level === BULK_LEVELS.empty) return action.result()
@@ -208,7 +239,7 @@ export function updateLot(db: DbOrTx, actor: Actor, lotId: string, input: LotUpd
     if (Object.keys(fields).length > 0) {
       tx.update(stockItems).set(fields).where(eq(stockItems.id, lotId)).run()
     }
-    const action = createAction(tx, actor, lot.productId)
+    const action = createAction(tx, actor, product)
     if (quantity !== undefined) action.set(lot, quantity, 'adjust')
     return action.result()
   })
@@ -245,7 +276,7 @@ export function undoAction(db: DbOrTx, actor: Actor, actionId: string) {
       .set({ undoneAt: new Date() })
       .where(and(eq(stockMovements.actionId, actionId), isNull(stockMovements.undoneAt)))
       .run()
-    return { stock: getStockSummary(tx, productId) }
+    return { stock: settle(tx, actor.householdId, product) }
   })
 }
 

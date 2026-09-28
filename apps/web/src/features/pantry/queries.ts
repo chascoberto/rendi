@@ -10,11 +10,12 @@ export const pantryKeys = {
   expiring: (days: number) => ['pantry', 'expiring', days] as const,
 }
 
-/** El stock aparece en la lista de productos, en el detalle y en "por vencer". */
-function invalidateStock() {
+/** El stock aparece en la lista de productos, en el detalle, en "por vencer" y en la lista de compras. */
+export function invalidateStock() {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: catalogKeys.all }),
     queryClient.invalidateQueries({ queryKey: ['pantry', 'expiring'] }),
+    queryClient.invalidateQueries({ queryKey: ['shopping'] }),
   ])
 }
 

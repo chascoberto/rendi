@@ -17,6 +17,7 @@ import {
   getStockTotals,
   listLots,
 } from '../pantry/service'
+import { syncMinStockItem } from '../shopping/auto'
 import { findOrCreateFood, likePattern } from './foods'
 import type { ProductLookup } from './lookup/types'
 import { productDerivedFields } from './product-fields'
@@ -92,17 +93,29 @@ function findProduct(db: DbOrTx, householdId: string, productId: string) {
 /** Datos del producto que necesitan otros módulos (p. ej. la despensa para mover stock). */
 export type ProductRef = Pick<
   NonNullable<ReturnType<typeof findProduct>>,
-  'id' | 'name' | 'brand' | 'contentAmount' | 'contentUnit' | 'stockMode' | 'defaultLocationId'
+  | 'id'
+  | 'name'
+  | 'brand'
+  | 'categoryId'
+  | 'contentAmount'
+  | 'contentUnit'
+  | 'stockMode'
+  | 'minStock'
+  | 'defaultLocationId'
+  | 'archivedAt'
 >
 
 const refColumns = {
   id: products.id,
   name: products.name,
   brand: products.brand,
+  categoryId: products.categoryId,
   contentAmount: products.contentAmount,
   contentUnit: products.contentUnit,
   stockMode: products.stockMode,
+  minStock: products.minStock,
   defaultLocationId: products.defaultLocationId,
+  archivedAt: products.archivedAt,
 }
 
 /** Producto del hogar (archivado o no); 404 si no existe o es de otro hogar. */
@@ -116,8 +129,13 @@ export function getProductRef(db: DbOrTx, householdId: string, productId: string
   return row
 }
 
-/** Productos activos del hogar entre los ids dados (los de otro hogar o archivados se omiten). */
-export function listProductRefs(db: DbOrTx, householdId: string, productIds: string[]) {
+/** Productos del hogar entre los ids dados (los de otro hogar se omiten; los archivados, salvo que se pidan). */
+export function listProductRefs(
+  db: DbOrTx,
+  householdId: string,
+  productIds: string[],
+  opts: { includeArchived?: boolean } = {},
+) {
   if (productIds.length === 0) return new Map<string, ProductRef>()
   const rows = db
     .select(refColumns)
@@ -125,7 +143,7 @@ export function listProductRefs(db: DbOrTx, householdId: string, productIds: str
     .where(
       and(
         eq(products.householdId, householdId),
-        isNull(products.archivedAt),
+        opts.includeArchived ? undefined : isNull(products.archivedAt),
         inArray(products.id, productIds),
       ),
     )
@@ -198,7 +216,7 @@ export function createProduct(db: DbOrTx, householdId: string, input: ProductCre
       .returning({ id: products.id })
       .all()
     if (input.barcode) insertBarcode(tx, householdId, product!.id, input.barcode)
-    return getProduct(tx, householdId, product!.id)
+    return withMinStockSync(tx, householdId, getProduct(tx, householdId, product!.id))
   })
 }
 
@@ -260,19 +278,28 @@ export function updateProduct(
       .run()
 
     if (modeChange && merged.stockMode === 'unit') convertStockMode(tx, conversion)
-    return getProduct(tx, householdId, productId)
+    return withMinStockSync(tx, householdId, getProduct(tx, householdId, productId))
   })
+}
+
+/** Re-evalúa la reposición automática tras crear o editar un producto (mínimo, modo o stock). */
+function withMinStockSync(tx: DbOrTx, householdId: string, detail: ReturnType<typeof getProduct>) {
+  syncMinStockItem(tx, householdId, detail.product, detail.stock.total)
+  return detail
 }
 
 /** Archiva: el producto deja de aparecer, pero su historial de stock y precios se conserva. */
 export function archiveProduct(db: DbOrTx, householdId: string, productId: string) {
-  const [row] = db
-    .update(products)
-    .set({ archivedAt: new Date() })
-    .where(and(eq(products.id, productId), eq(products.householdId, householdId)))
-    .returning({ id: products.id })
-    .all()
-  if (!row) throw notFound('Producto no encontrado')
+  db.transaction((tx) => {
+    const [row] = tx
+      .update(products)
+      .set({ archivedAt: new Date() })
+      .where(and(eq(products.id, productId), eq(products.householdId, householdId)))
+      .returning({ id: products.id, minStock: products.minStock, archivedAt: products.archivedAt })
+      .all()
+    if (!row) throw notFound('Producto no encontrado')
+    syncMinStockItem(tx, householdId, row, getStockSummary(tx, productId).total)
+  })
 }
 
 export function addBarcode(

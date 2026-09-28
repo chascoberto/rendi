@@ -1,5 +1,6 @@
 import type { LoginInput } from '@rendi/shared'
 import { queryOptions, useMutation, useQuery } from '@tanstack/vue-query'
+import { clearCheckQueue } from '@/features/shopping/checkQueue'
 import { api, call } from '@/lib/api'
 import { queryClient } from '@/lib/query'
 
@@ -38,4 +39,6 @@ export function useLogout() {
  */
 export function clearCachedData() {
   queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
+  // Las marcas pendientes son de quien salió: no deben enviarse con la sesión de otra persona.
+  clearCheckQueue()
 }

@@ -53,6 +53,22 @@ export function getHousehold(db: DbOrTx, householdId: string) {
   return { household: { id: household.id, name: household.name }, members: rows }
 }
 
+/** Adultos con cuenta del hogar, indexados por `userId` (para mostrar quién hizo algo). */
+export function listUsers(db: DbOrTx, householdId: string) {
+  const rows = db
+    .select({
+      userId: users.id,
+      memberId: members.id,
+      name: members.name,
+      avatarEmoji: members.avatarEmoji,
+    })
+    .from(users)
+    .innerJoin(members, eq(members.id, users.memberId))
+    .where(eq(members.householdId, householdId))
+    .all()
+  return new Map(rows.map((r) => [r.userId, r]))
+}
+
 /** Obtiene un miembro verificando que pertenezca al hogar. */
 export function getMember(db: DbOrTx, householdId: string, memberId: string) {
   const member = db

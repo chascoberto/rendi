@@ -10,6 +10,7 @@ import { catalogRoutes } from './modules/catalog/routes'
 import { householdRoutes } from './modules/household/routes'
 import { noopLookup, type ProductLookup } from './modules/catalog/lookup/types'
 import { pantryRoutes } from './modules/pantry/routes'
+import { shoppingRoutes } from './modules/shopping/routes'
 import { systemRoutes } from './modules/system/routes'
 
 z.config(z.locales.es())
@@ -43,6 +44,7 @@ export function createApp(deps: AppDeps) {
     .route('/household', householdRoutes)
     .route('/catalog', catalogRoutes)
     .route('/pantry', pantryRoutes)
+    .route('/shopping', shoppingRoutes)
 }
 
 export type AppType = ReturnType<typeof createApp>

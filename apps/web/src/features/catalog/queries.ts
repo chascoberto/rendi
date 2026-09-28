@@ -74,8 +74,15 @@ export function useLocations() {
   })
 }
 
-/** Cualquier cambio en el catálogo invalida listas, detalles y alimentos. */
-const invalidateCatalog = () => queryClient.invalidateQueries({ queryKey: catalogKeys.all })
+/**
+ * Cualquier cambio en el catálogo invalida listas, detalles y alimentos, y la lista de compras
+ * (el mínimo de un producto decide si aparece como ítem automático).
+ */
+const invalidateCatalog = () =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: catalogKeys.all }),
+    queryClient.invalidateQueries({ queryKey: ['shopping'] }),
+  ])
 
 export function useCreateProduct() {
   return useMutation({
