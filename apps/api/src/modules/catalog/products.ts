@@ -6,11 +6,17 @@ import {
   type ProductCreateInput,
   type ProductUpdateInput,
 } from '@rendi/shared'
-import { and, asc, eq, isNull, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { DbOrTx } from '../../db/client'
 import { categories, foods, productBarcodes, products } from '../../db/schema'
 import { AppError, badRequest, notFound } from '../../lib/errors'
-import { assertLocation, convertStockMode, getStockSummary } from '../pantry/service'
+import {
+  assertLocation,
+  convertStockMode,
+  getStockSummary,
+  getStockTotals,
+  listLots,
+} from '../pantry/service'
 import { findOrCreateFood, likePattern } from './foods'
 import type { ProductLookup } from './lookup/types'
 import { productDerivedFields } from './product-fields'
@@ -36,7 +42,7 @@ const productColumns = {
   archivedAt: products.archivedAt,
 }
 
-/** Busca productos activos por nombre/marca (sin tildes) o por código de barras exacto. */
+/** Busca productos activos por nombre/marca (sin tildes) o por código de barras exacto, con su stock. */
 export function listProducts(
   db: DbOrTx,
   householdId: string,
@@ -48,7 +54,7 @@ export function listProducts(
         WHERE ${productBarcodes.householdId} = ${householdId} AND ${productBarcodes.ean} = ${q})`
     : undefined
   const byText = q ? sql`${products.searchText} LIKE ${likePattern(q)} ESCAPE '\\'` : undefined
-  return db
+  const rows = db
     .select(productColumns)
     .from(products)
     .leftJoin(foods, eq(foods.id, products.foodId))
@@ -63,6 +69,15 @@ export function listProducts(
     .orderBy(asc(products.searchText))
     .limit(opts.limit ?? 200)
     .all()
+  const totals = getStockTotals(
+    db,
+    rows.map((r) => r.id),
+  )
+  return rows.map((r) => ({
+    ...r,
+    stock: totals.get(r.id)?.total ?? 0,
+    nextExpiry: totals.get(r.id)?.nextExpiry ?? null,
+  }))
 }
 
 function findProduct(db: DbOrTx, householdId: string, productId: string) {
@@ -74,7 +89,51 @@ function findProduct(db: DbOrTx, householdId: string, productId: string) {
     .get()
 }
 
-/** Producto con sus códigos de barra y resumen de stock. */
+/** Datos del producto que necesitan otros módulos (p. ej. la despensa para mover stock). */
+export type ProductRef = Pick<
+  NonNullable<ReturnType<typeof findProduct>>,
+  'id' | 'name' | 'brand' | 'contentAmount' | 'contentUnit' | 'stockMode' | 'defaultLocationId'
+>
+
+const refColumns = {
+  id: products.id,
+  name: products.name,
+  brand: products.brand,
+  contentAmount: products.contentAmount,
+  contentUnit: products.contentUnit,
+  stockMode: products.stockMode,
+  defaultLocationId: products.defaultLocationId,
+}
+
+/** Producto del hogar (archivado o no); 404 si no existe o es de otro hogar. */
+export function getProductRef(db: DbOrTx, householdId: string, productId: string): ProductRef {
+  const row = db
+    .select(refColumns)
+    .from(products)
+    .where(and(eq(products.id, productId), eq(products.householdId, householdId)))
+    .get()
+  if (!row) throw notFound('Producto no encontrado')
+  return row
+}
+
+/** Productos activos del hogar entre los ids dados (los de otro hogar o archivados se omiten). */
+export function listProductRefs(db: DbOrTx, householdId: string, productIds: string[]) {
+  if (productIds.length === 0) return new Map<string, ProductRef>()
+  const rows = db
+    .select(refColumns)
+    .from(products)
+    .where(
+      and(
+        eq(products.householdId, householdId),
+        isNull(products.archivedAt),
+        inArray(products.id, productIds),
+      ),
+    )
+    .all()
+  return new Map(rows.map((r) => [r.id, r]))
+}
+
+/** Producto con sus códigos de barra, resumen de stock y lotes. */
 export function getProduct(db: DbOrTx, householdId: string, productId: string) {
   const product = findProduct(db, householdId, productId)
   if (!product) throw notFound('Producto no encontrado')
@@ -84,7 +143,12 @@ export function getProduct(db: DbOrTx, householdId: string, productId: string) {
     .where(eq(productBarcodes.productId, productId))
     .orderBy(asc(productBarcodes.packCount), asc(productBarcodes.ean))
     .all()
-  return { product, barcodes, stock: getStockSummary(db, productId) }
+  return {
+    product,
+    barcodes,
+    stock: getStockSummary(db, productId),
+    lots: listLots(db, productId),
+  }
 }
 
 function assertCategory(db: DbOrTx, categoryId: string | null | undefined) {

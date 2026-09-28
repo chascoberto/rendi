@@ -33,7 +33,9 @@ Se usa principalmente desde el celular, incluso dentro del supermercado.
 - **Escáner**: `barcode-detector` (ponyfill) + `zxing-wasm` 3.1.3 (misma versión que usa barcode-detector).
   `features/scanner/detector.ts` usa la API nativa si trae EAN (Chrome Android) y si no el ponyfill; el
   `.wasm` se importa con `?url` y se sirve desde la app (nunca CDN: debe funcionar sin internet).
-  Formatos: ean_13, ean_8, upc_a. Un código se acepta tras leerlo 2 veces seguidas; vibra y pausa.
+  Formatos: ean_13, ean_8, upc_a. Un código se acepta tras leerlo 2 veces seguidas; vibra y pausa. Al reanudar,
+  el código recién aceptado se ignora hasta que falte ~4 fotogramas (sale del cuadro). Un producto conocido
+  ofrece "Compré" (suma `pack_count` unidades) y "Usé uno" desde el mismo panel.
   La cámara exige HTTPS (o localhost); sin ella el componente ofrece ingreso manual.
 - **Backend** `apps/api`: Hono sobre `@hono/node-server`. Validación con Zod 4 (`@hono/zod-validator`).
   Build con tsdown → `dist/server.mjs` (las dependencias npm quedan externas; `@rendi/*` se incluye en el bundle).
@@ -187,8 +189,18 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   texto sin tildes o un EAN exacto. Cambio de modo con stock: `pantry/service.convertStockMode` en la misma
   transacción (unit→bulk antes de cambiar el modo: consolida en un lote nivel 2/0; bulk→unit después: exige
   `unitCount` si había stock).
-- **Pendiente para el paso 6**: al cambiar `min_stock` de un producto (o su stock) debe re-evaluarse la regla de
-  la lista automática. Hoy `updateProduct` no llama a `shopping`; hacerlo cuando exista ese servicio.
+- **Despensa** (`modules/pantry`): `service.ts` = funciones de bajo nivel sin dependencia del catálogo
+  (ubicaciones, totales, lotes, orden FEFO, `convertStockMode`); `stock.ts` = acciones (usé uno, se acabó, compré,
+  nivel a granel, ajuste de lote, deshacer, por vencer), que obtienen el producto vía `catalog/products`
+  (`getProductRef`, `listProductRefs`). Así no hay importación circular: `catalog → pantry/service` y
+  `pantry/stock → catalog`. Cada acción devuelve `{ actionId, stock }`; `actionId` es null si nada cambió.
+  "Compré" en `unit` suma a un lote igual (misma ubicación y vencimiento, sin abrir) o crea uno; en `bulk` deja
+  el nivel en Hay. Deshacer marca `undone_at` y revierte los deltas; el servidor lo acepta hasta 10 min
+  (`UNDO_WINDOW_MS`) y responde 409 `undo_conflict` si el resultado ya no es válido. Los lotes en 0 no se
+  borran (se ocultan). "Por vencer" = lotes con stock y vencimiento hasta hoy + 30 días, incluidos los vencidos.
+- **Pendiente para el paso 6**: al cambiar `min_stock` de un producto o tras cada acción de stock (incluido
+  deshacer) debe re-evaluarse la regla de la lista automática. Hoy ni `updateProduct` ni `pantry/stock` llaman a
+  `shopping`; el punto natural es `createAction().result()` en `pantry/stock.ts` y `undoAction`.
 - **Fuentes de precio intercambiables** (futuro): interfaz `PriceSource` en `modules/prices/sources/`,
   todas escriben en `price_observations`.
 - **Migraciones**: se generan con drizzle-kit y se commitean; **nunca editar una migración ya aplicada**, crear otra.
@@ -219,6 +231,9 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
   Barra inferior: Despensa · Lista · Escanear (botón central) · Vence · Hogar.
   Las páginas usan `mutate(..., { onSuccess })` (o `mutateAsync` dentro de try/catch): el error se muestra
   desde el estado de la mutación y nunca queda una promesa rechazada sin manejar.
+  Toasts: `showToast` (`composables/useToast.ts`) + `ToastHost` en App.vue (región `status` "Aviso", 5 s).
+  Las mutaciones de stock (`features/pantry/queries.ts`, `useStockAction`) muestran "Deshacer" si hay `actionId`.
+  Ojo: un toast queda detrás de un `BottomSheet` abierto (top layer): cerrar el panel al terminar la acción.
   Logout: `useLogout` deja `me` en null → navegar al login → `clearCachedData()` (en ese orden).
   Sugerencias y desplegables van en el flujo normal de la página, no flotando: en el celular no deben tapar
   botones de acción.
@@ -261,7 +276,7 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 3. ✅ Auth (login, sesiones, CLI de usuarios) + hogar (crear/eliminar adultos y niños, preferencias acepta/rechaza
    con notas) + shell de la app + e2e con Playwright.
 4. ✅ Catálogo (crear/editar/archivar, búsqueda, códigos con packs) + escáner EAN (cámara + manual) + Open Food Facts.
-5. ⏳ Despensa: lotes, acciones rápidas con deshacer, próximos a vencer.
+5. ✅ Despensa: lotes (FEFO, ajuste manual), acciones rápidas con deshacer (detalle, lista y escáner), por vencer.
 6. ⏳ Lista de compras: manual + automática, finalizar compra, cola offline de marcado.
 7. ⏳ PWA + despliegue: manifest, service worker, build, `rendi.service`, respaldo con cron, README completo.
 

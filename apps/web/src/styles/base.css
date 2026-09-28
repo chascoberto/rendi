@@ -42,3 +42,16 @@ h3 {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* Texto solo para lectores de pantalla. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

@@ -24,7 +24,7 @@ test('la despensa lista y busca productos sin tildes, con filtro por categoría'
 
   await page.getByLabel('Buscar producto').fill('platano')
   await expect(list.getByRole('link')).toHaveCount(1)
-  await expect(list.getByRole('link', { name: /Plátano.*Granel/ })).toBeVisible()
+  await expect(list.getByRole('link', { name: /Plátano.*Queda poco/ })).toBeVisible()
 
   await page.getByLabel('Buscar producto').fill('')
   await page.getByRole('radio', { name: 'Limpieza' }).click()
@@ -52,7 +52,7 @@ test('crea un producto a mano y lo edita', async ({ page }) => {
   await expect(page.getByRole('switch', { name: /quede poco/ })).toBeVisible()
   await page.getByRole('button', { name: 'Guardar cambios' }).click()
   await page.goto('/')
-  await expect(page.getByRole('link', { name: /Porotos negros.*Wasil.*Granel/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Porotos negros.*Wasil.*Se acabó/ })).toBeVisible()
 })
 
 test('asocia el código de un pack a un producto existente', async ({ page }) => {

@@ -1,5 +1,5 @@
 import { BULK_LEVELS, type StockMode } from '@rendi/shared'
-import { and, asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm'
 import { v7 as uuidv7 } from 'uuid'
 import type { DbOrTx } from '../../db/client'
 import { locations, stockItems, stockMovements } from '../../db/schema'
@@ -37,6 +37,50 @@ export function getStockSummary(db: DbOrTx, productId: string) {
   return { total: row?.total ?? 0, lots: row?.lots ?? 0 }
 }
 
+/** Orden FEFO: primero el lote que vence antes; los sin vencimiento al final, y luego el más antiguo. */
+export const fefoOrder = [
+  sql`${stockItems.expiresOn} IS NULL`,
+  asc(stockItems.expiresOn),
+  asc(stockItems.addedAt),
+] as const
+
+/** Stock total y próximo vencimiento de varios productos (los que no tienen stock no aparecen). */
+export function getStockTotals(db: DbOrTx, productIds: string[]) {
+  const totals = new Map<string, { total: number; nextExpiry: string | null }>()
+  if (productIds.length === 0) return totals
+  const rows = db
+    .select({
+      productId: stockItems.productId,
+      total: sql<number>`sum(${stockItems.quantity})`,
+      nextExpiry: sql<string | null>`min(${stockItems.expiresOn})`,
+    })
+    .from(stockItems)
+    .where(and(inArray(stockItems.productId, productIds), gt(stockItems.quantity, 0)))
+    .groupBy(stockItems.productId)
+    .all()
+  for (const r of rows) totals.set(r.productId, { total: r.total, nextExpiry: r.nextExpiry })
+  return totals
+}
+
+/** Lotes con stock de un producto, en orden FEFO, con el nombre de su ubicación. */
+export function listLots(db: DbOrTx, productId: string) {
+  return db
+    .select({
+      id: stockItems.id,
+      quantity: stockItems.quantity,
+      expiresOn: stockItems.expiresOn,
+      openedAt: stockItems.openedAt,
+      addedAt: stockItems.addedAt,
+      locationId: stockItems.locationId,
+      locationName: locations.name,
+    })
+    .from(stockItems)
+    .innerJoin(locations, eq(locations.id, stockItems.locationId))
+    .where(and(eq(stockItems.productId, productId), gt(stockItems.quantity, 0)))
+    .orderBy(...fefoOrder)
+    .all()
+}
+
 /**
  * Adapta el stock al cambiar el modo de un producto. Debe correr en la misma transacción
  * que el cambio de `products.stock_mode`:
@@ -61,11 +105,7 @@ export function convertStockMode(
     .select()
     .from(stockItems)
     .where(eq(stockItems.productId, input.productId))
-    .orderBy(
-      sql`${stockItems.expiresOn} IS NULL`,
-      asc(stockItems.expiresOn),
-      asc(stockItems.addedAt),
-    )
+    .orderBy(...fefoOrder)
     .all()
   const actionId = uuidv7()
   const record = (stockItemId: string, delta: number) => {

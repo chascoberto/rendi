@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { refDebounced } from '@vueuse/core'
-import { ChevronRight, Package, Plus, ScanBarcode, Search } from 'lucide-vue-next'
+import { toCalendarDate } from '@rendi/shared'
+import { Minus, Package, Plus, ScanBarcode, Search } from 'lucide-vue-next'
 import { ref } from 'vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import PageHeader from '@/components/ui/PageHeader.vue'
 import { productSubtitle } from '@/features/catalog/format'
 import { useCategories, useProducts } from '@/features/catalog/queries'
 import { errorMessage } from '@/lib/api'
+import { expiryLabel, expiryTone, stockLabel } from './format'
+import { useConsume } from './queries'
 
 const search = ref('')
 const debounced = refDebounced(search, 200)
@@ -14,6 +17,12 @@ const categoryId = ref<string | null>(null)
 
 const { data, isPending, error } = useProducts(debounced, categoryId)
 const { data: categories } = useCategories()
+const consume = useConsume()
+const today = toCalendarDate()
+
+/** En la lista solo se avisan los vencimientos cercanos. */
+const showExpiry = (date: string | null): date is string =>
+  !!date && ['expired', 'soon'].includes(expiryTone(date, today))
 </script>
 
 <template>
@@ -76,17 +85,43 @@ const { data: categories } = useCategories()
       description="Escanea un código de barras o crea un producto a mano."
     />
     <ul v-else class="list" aria-label="Productos">
-      <li v-for="p in data.products" :key="p.id">
+      <li v-for="p in data.products" :key="p.id" class="item">
         <RouterLink class="row" :to="{ name: 'product', params: { id: p.id } }">
           <span class="row-main">
             <span class="row-title">{{ p.name }}</span>
             <span class="row-sub">{{ productSubtitle(p) }}</span>
+            <span
+              v-if="showExpiry(p.nextExpiry)"
+              class="row-expiry"
+              :class="`row-expiry--${expiryTone(p.nextExpiry, today)}`"
+            >
+              {{ expiryLabel(p.nextExpiry, today) }}
+            </span>
           </span>
-          <span v-if="p.stockMode === 'bulk'" class="badge">Granel</span>
-          <ChevronRight :size="18" class="muted" />
+          <span v-if="p.stockMode === 'bulk'" class="level" :class="`level--${p.stock}`">
+            {{ stockLabel('bulk', p.stock) }}
+          </span>
+          <span v-else-if="p.stock > 0" class="count">
+            {{ p.stock }}<span class="sr-only"> en stock</span>
+          </span>
+          <span v-else class="level level--0">Sin stock</span>
         </RouterLink>
+        <button
+          v-if="p.stockMode === 'unit' && p.stock > 0"
+          type="button"
+          class="quick"
+          :aria-label="`Usé uno: ${p.name}`"
+          :disabled="consume.isPending.value"
+          @click="consume.mutate({ productId: p.id, name: p.name })"
+        >
+          <Minus :size="20" />
+        </button>
+        <span v-else class="quick-spacer" aria-hidden="true" />
       </li>
     </ul>
+    <p v-if="consume.isError.value" class="error" role="alert">
+      {{ errorMessage(consume.error.value) }}
+    </p>
   </template>
 
   <RouterLink class="fab" :to="{ name: 'product-new' }" aria-label="Nuevo producto">
@@ -173,12 +208,19 @@ const { data: categories } = useCategories()
   border-top: 1px solid var(--color-border);
 }
 
-.row {
+.item {
   display: flex;
   align-items: center;
+}
+
+.row {
+  display: flex;
+  flex: 1;
+  align-items: center;
   gap: var(--space-3);
+  min-width: 0;
   min-height: 60px;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
   color: inherit;
   text-decoration: none;
 }
@@ -205,13 +247,73 @@ const { data: categories } = useCategories()
   font-size: 0.85rem;
 }
 
-.badge {
+.row-expiry {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.row-expiry--expired {
+  color: var(--color-danger);
+}
+
+.row-expiry--soon {
+  color: var(--color-warning);
+}
+
+.count {
+  min-width: 32px;
   padding: 2px var(--space-2);
   border-radius: 999px;
   background: var(--color-surface-2);
-  color: var(--color-text-muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.level {
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.level--1 {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.level--0 {
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+/* "Usé uno" directo desde la lista. */
+.quick,
+.quick-spacer {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  margin-right: var(--space-2);
+}
+
+.quick {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.quick:active:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+.quick:disabled {
+  opacity: 0.5;
 }
 
 .fab {

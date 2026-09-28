@@ -6,6 +6,8 @@ export type ScannerState =
   'idle' | 'starting' | 'scanning' | 'paused' | 'denied' | 'unavailable' | 'error'
 
 const SCAN_INTERVAL_MS = 120
+/** Fotogramas sin el código aceptado para volver a leerlo (~0,5 s). */
+const RELEASE_FRAMES = 4
 
 /**
  * Cámara trasera + detección continua. Al leer un código válido dos veces seguidas
@@ -23,6 +25,10 @@ export function useBarcodeScanner(
   let stream: MediaStream | null = null
   let timer: ReturnType<typeof setTimeout> | undefined
   let lastRead: string | null = null
+  // El código recién aceptado se ignora hasta que salga del cuadro unos fotogramas: al reanudar
+  // tras "Compré" el producto suele seguir frente a la cámara.
+  let accepted: string | null = null
+  let framesWithoutAccepted = 0
 
   async function start() {
     if (state.value === 'starting' || state.value === 'scanning') return
@@ -71,9 +77,17 @@ export function useBarcodeScanner(
           const code = codes
             .map((c) => c.rawValue)
             .find((v) => isValidEan(v) || isVariableMeasureEan(v))
-          if (code && code === lastRead) {
+          if (accepted && code !== accepted && ++framesWithoutAccepted >= RELEASE_FRAMES) {
+            accepted = null
+          }
+          if (code && code === accepted) {
+            framesWithoutAccepted = 0
+            lastRead = null
+          } else if (code && code === lastRead) {
             state.value = 'paused'
             lastRead = null
+            accepted = code
+            framesWithoutAccepted = 0
             navigator.vibrate?.(60)
             onCode(code)
           } else {

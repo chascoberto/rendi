@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 import BottomNav from '@/components/layout/BottomNav.vue'
+import ToastHost from '@/components/layout/ToastHost.vue'
 import '@/composables/useTheme'
 
 const route = useRoute()
@@ -10,6 +11,7 @@ const route = useRoute()
   <main class="app-main" :class="{ 'app-main--with-nav': !route.meta.public }">
     <RouterView />
   </main>
+  <ToastHost />
   <BottomNav v-if="!route.meta.public" />
 </template>
 

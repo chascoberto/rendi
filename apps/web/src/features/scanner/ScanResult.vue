@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { formatContent, type ContentUnit } from '@rendi/shared'
-import { Barcode, PackagePlus, Scale, Search } from 'lucide-vue-next'
+import { Barcode, Minus, PackagePlus, Plus, Scale, Search } from 'lucide-vue-next'
 import { computed, ref } from 'vue'
 import AppButton from '@/components/ui/AppButton.vue'
 import NumberStepper from '@/components/ui/NumberStepper.vue'
@@ -11,6 +11,7 @@ import {
   useAddBarcode,
   useProducts,
 } from '@/features/catalog/queries'
+import { useConsume, usePurchase } from '@/features/pantry/queries'
 import { errorMessage } from '@/lib/api'
 
 const props = defineProps<{ result: BarcodeLookup }>()
@@ -31,6 +32,26 @@ const addBarcode = useAddBarcode()
 const suggestion = computed(() =>
   props.result.status === 'unknown' ? props.result.suggestion : null,
 )
+
+// Producto conocido: "Compré" suma las unidades del código (un pack de 6 suma 6).
+const purchase = usePurchase()
+const consume = useConsume()
+const stockError = computed(() => purchase.error.value ?? consume.error.value)
+
+function buy() {
+  if (props.result.status !== 'found') return
+  const { product, packCount } = props.result
+  purchase.mutate(
+    { productId: product.id, name: product.name, input: { quantity: packCount } },
+    { onSuccess: () => emit('done') },
+  )
+}
+
+function useOne() {
+  if (props.result.status !== 'found') return
+  const { product } = props.result
+  consume.mutate({ productId: product.id, name: product.name }, { onSuccess: () => emit('done') })
+}
 
 function create() {
   if (props.result.status !== 'unknown') return
@@ -61,10 +82,23 @@ function link() {
       <p class="muted">{{ productSubtitle(result.product) }}</p>
       <p v-if="result.packCount > 1" class="pack">Pack de {{ result.packCount }} unidades</p>
       <p v-if="result.archived" class="warning">Este producto está archivado.</p>
-      <div class="actions">
-        <AppButton variant="primary" size="lg" block @click="emit('open', result.product.id)">
-          Ver producto
+      <p v-if="stockError" class="error" role="alert">{{ errorMessage(stockError) }}</p>
+      <div v-if="!result.archived" class="stock-actions">
+        <AppButton variant="primary" size="lg" :loading="purchase.isPending.value" @click="buy">
+          <Plus :size="18" />
+          {{ result.packCount > 1 ? `Compré (+${result.packCount})` : 'Compré' }}
         </AppButton>
+        <AppButton
+          v-if="result.product.stockMode === 'unit'"
+          size="lg"
+          :loading="consume.isPending.value"
+          @click="useOne"
+        >
+          <Minus :size="18" /> Usé uno
+        </AppButton>
+      </div>
+      <div class="actions">
+        <AppButton block @click="emit('open', result.product.id)">Ver producto</AppButton>
         <AppButton variant="ghost" block @click="emit('done')">Seguir escaneando</AppButton>
       </div>
     </template>
@@ -224,6 +258,14 @@ function link() {
   color: var(--color-text-muted);
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+.stock-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
 .actions {

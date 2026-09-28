@@ -20,6 +20,33 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await page.getByRole('link', { name: /Leche entera/ }).click()
       await page.getByRole('heading', { name: 'Códigos de barra' }).waitFor()
       await shot('producto')
+      // Toast con "Deshacer" (y se deshace, para no alterar la otra pasada).
+      await page.getByRole('button', { name: 'Usé uno' }).click()
+      await page.getByRole('status', { name: 'Aviso' }).getByRole('button').waitFor()
+      await page.screenshot({
+        path: `test-results/screens/${colorScheme}-toast.png`,
+        animations: 'disabled',
+      })
+      await page.getByRole('status', { name: 'Aviso' }).getByRole('button').click()
+      await page.getByRole('button', { name: 'Compré' }).click()
+      await page.getByRole('dialog', { name: 'Compré' }).waitFor()
+      await page.screenshot({
+        path: `test-results/screens/${colorScheme}-compre.png`,
+        animations: 'disabled',
+      })
+      await page.keyboard.press('Escape')
+      await page.goto('/')
+      await page.getByLabel('Buscar producto').fill('platano')
+      await page.getByRole('link', { name: /Plátano/ }).click()
+      await page.getByRole('radiogroup', { name: 'Nivel' }).waitFor()
+      await shot('granel')
+      await page.goto('/vencimientos')
+      await page
+        .getByRole('heading', { name: 'Vencidos' })
+        .or(page.getByRole('heading', { name: 'Hoy y mañana' }))
+        .first()
+        .waitFor()
+      await shot('vencimientos')
       await page.goto('/escanear')
       await page.getByRole('button', { name: 'Ingresar código a mano' }).click()
       await page.getByLabel('Código de barras').fill('9780201379624')

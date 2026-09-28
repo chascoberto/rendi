@@ -32,9 +32,22 @@ test('escanear con la cámara: código nuevo → crear producto → volver a esc
   await expect(page.getByRole('heading', { name: 'Galletas de prueba' })).toBeVisible()
   await expect(page.getByText(SCANNED_EAN)).toBeVisible()
 
+  // Producto conocido: "Compré" desde el escaneo suma al stock y el código no se relee solo.
+  await page.getByRole('link', { name: 'Escanear' }).first().click()
+  await expect(sheet.getByText('Galletas de prueba')).toBeVisible({ timeout: 15_000 })
+  await sheet.getByRole('button', { name: 'Compré' }).click()
+  await expect(sheet).toBeHidden()
+  await expect(page.getByRole('status', { name: 'Aviso' })).toContainText(
+    'Compraste: Galletas de prueba',
+  )
+  await page.waitForTimeout(1_500)
+  await expect(sheet).toBeHidden()
+
+  await page.goto('/')
   await page.getByRole('link', { name: 'Escanear' }).first().click()
   await expect(sheet.getByText('Galletas de prueba')).toBeVisible({ timeout: 15_000 })
   await sheet.getByRole('button', { name: 'Ver producto' }).click()
   await expect(page.getByRole('heading', { name: 'Galletas de prueba' })).toBeVisible()
+  await expect(page.getByTestId('stock-total')).toHaveText('1 unidad')
   expect(cdnRequests).toEqual([])
 })

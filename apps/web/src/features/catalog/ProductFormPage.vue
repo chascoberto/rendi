@@ -19,6 +19,7 @@ import SegmentedControl from '@/components/ui/SegmentedControl.vue'
 import SelectField from '@/components/ui/SelectField.vue'
 import SwitchField from '@/components/ui/SwitchField.vue'
 import TextField from '@/components/ui/TextField.vue'
+import StockPanel from '@/features/pantry/StockPanel.vue'
 import BarcodeScanner from '@/features/scanner/BarcodeScanner.vue'
 import { errorMessage } from '@/lib/api'
 import FoodNameField from './FoodNameField.vue'
@@ -202,6 +203,10 @@ function addCode() {
 
   <p v-if="loadError" class="error">{{ errorMessage(loadError) }}</p>
 
+  <div v-if="detail && id" class="stock">
+    <StockPanel :detail="detail" />
+  </div>
+
   <form v-if="isNew || detail" class="form" @submit.prevent="save">
     <AppCard>
       <div class="block">
@@ -246,7 +251,7 @@ function addCode() {
 
     <AppCard>
       <div class="block">
-        <h2 class="block-title">Stock</h2>
+        <h2 class="block-title">Conteo y reposición</h2>
         <SegmentedControl v-model="form.stockMode" label="Cómo se cuenta" :options="modeOptions" />
         <p class="muted small">
           {{
@@ -450,6 +455,10 @@ function addCode() {
 
 .spaced {
   margin-top: var(--space-4);
+}
+
+.stock {
+  margin-bottom: var(--space-4);
 }
 
 .error {

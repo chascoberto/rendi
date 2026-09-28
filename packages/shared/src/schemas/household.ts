@@ -3,7 +3,7 @@ import { avatarEmojiSchema } from '../emoji'
 import { capitalizeFirst, capitalizePersonName } from '../text'
 import { passwordSchema, usernameSchema } from './auth'
 
-const calendarDateSchema = z.iso.date('Fecha inválida')
+export const calendarDateSchema = z.iso.date('Fecha inválida')
 
 const optionalText = (max: number) =>
   z
