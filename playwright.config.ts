@@ -26,7 +26,8 @@ export default defineConfig({
   grep: screens ? /@screens/ : undefined,
   grepInvert: screens ? undefined : /@screens/,
   projects: [
-    { name: 'mobile', testIgnore: /scanner\.spec/ },
+    // e2e/prod corre aparte contra el build de producción (playwright.prod.config.ts).
+    { name: 'mobile', testIgnore: [/scanner\.spec/, /prod\//] },
     {
       // Cámara falsa: Chromium muestra un video con un código de barras (ver e2e/fixtures).
       name: 'scanner',

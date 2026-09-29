@@ -1,0 +1,40 @@
+# Servicio systemd de Rendi (API + app compilada en un solo proceso).
+# Instalación: ver README.md → "Despliegue". Supone el repo en /opt/rendi y el usuario `rendi`.
+#   sudo cp deploy/rendi.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now rendi
+#   journalctl -u rendi -f      # logs
+
+[Unit]
+Description=Rendi (despensa y compras del hogar)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rendi
+Group=rendi
+WorkingDirectory=/opt/rendi/apps/api
+# NODE_ENV=production, PORT, DATABASE_PATH, etc. (ver apps/api/.env.example).
+EnvironmentFile=/opt/rendi/apps/api/.env
+ExecStart=/usr/bin/node dist/server.mjs
+Restart=on-failure
+RestartSec=5
+# La API cierra la base al recibir SIGTERM.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# Endurecimiento: solo puede escribir en la carpeta de datos.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/opt/rendi/apps/api/data
+
+[Install]
+WantedBy=multi-user.target

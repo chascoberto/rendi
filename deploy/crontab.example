@@ -1,0 +1,7 @@
+# Respaldo diario de Rendi a las 03:30 (hora del servidor).
+# Instalar para el usuario `rendi`:   sudo crontab -u rendi deploy/crontab.example
+# Ver el registro:                    tail -f /var/backups/rendi/backup.log
+#
+# Recomendado: copiar además /var/backups/rendi a otro equipo (rsync, rclone, disco externo).
+
+30 3 * * * /opt/rendi/deploy/backup.sh >> /var/backups/rendi/backup.log 2>&1

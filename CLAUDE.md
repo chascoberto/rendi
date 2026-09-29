@@ -29,7 +29,8 @@ Se usa principalmente desde el celular, incluso dentro del supermercado.
   Revisar al actualizar dependencias.
 - **Frontend** `apps/web`: Vue 3 + Vite 8 + TypeScript, Vue Router 5, TanStack Query (estado del servidor),
   lucide-vue-next (íconos), @vueuse/core. Sin Pinia: el estado local compartido (toasts, cola offline) son
-  módulos con `ref` a nivel de módulo. Por agregar: vite-plugin-pwa (paso 7).
+  módulos con `ref` a nivel de módulo. PWA con vite-plugin-pwa (solo en el build; en `pnpm dev` no hay
+  service worker).
 - **Escáner**: `barcode-detector` (ponyfill) + `zxing-wasm` 3.1.3 (misma versión que usa barcode-detector).
   `features/scanner/detector.ts` usa la API nativa si trae EAN (Chrome Android) y si no el ponyfill; el
   `.wasm` se importa con `?url` y se sirve desde la app (nunca CDN: debe funcionar sin internet).
@@ -78,7 +79,7 @@ apps/web/src/
   lib/api.ts        cliente `hc<AppType>` tipado
   styles/           tokens.css (claro/oscuro), base.css
 packages/shared/src/  units.ts, money.ts, stock.ts, ...
-deploy/             rendi.service, script de respaldo, crontab de ejemplo (paso 7)
+deploy/             rendi.service, backup.sh, update.sh, crontab.example
 ```
 
 ## Convenciones
@@ -178,6 +179,14 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 - **Drizzle sobre Kysely**: el esquema en TS es la única fuente de tipos y migraciones SQL generadas y revisables.
 - **better-sqlite3**: estable y síncrono (`node:sqlite` sigue experimental). SQLite en modo WAL.
 - **Un proceso en producción**: la API sirve también el frontend compilado; `tailscale serve` apunta a un puerto.
+  `apps/api/src/web.ts` (`withWebApp`): `/api/*` va a la API; el resto, archivos de `WEB_DIST_DIR` (por defecto
+  `../web/dist` en producción, nada en desarrollo) con fallback a index.html para rutas sin extensión.
+  `/assets/*` (con hash) se guardan un año; index.html, sw.js y manifest llevan `no-cache`.
+- **PWA** (`vite.config.ts`): manifest (íconos en `apps/web/public`, maskable con margen), precaché de todo el build
+  incluido el WASM del escáner, fallback de navegación a index.html. Caché de API `rendi-api` (NetworkFirst, 4 s)
+  solo para lo que necesita la lista sin conexión: `/api/auth/me`, `/api/shopping/items`, `/api/shopping/supermarkets`,
+  `/api/catalog/categories`; `clearCachedData` la borra al cerrar sesión. `registerType: 'prompt'`: una versión
+  nueva se ofrece con un toast persistente "Actualizar" (`src/pwa.ts`), nunca recarga sola.
 - **`foods` separado de `products`**: preferencias, recetas y "¿hay leche?" trabajan sobre alimentos genéricos.
 - **Packs en el código de barras o en la observación de precio**, no como productos duplicados.
 - **`members` unificado** para adultos y niños (porciones y variantes de menú sobre una sola tabla).
@@ -265,14 +274,22 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 - **better-sqlite3 se compila desde el código fuente** con node-gyp en la instalación: el servidor necesita
   `build-essential` y `python3` antes de `pnpm install`.
 - **Respaldo**: `sqlite3 .backup` (o `VACUUM INTO`), nunca `cp` del archivo en caliente con WAL.
-- **Despliegue**: Ubuntu Server x64, sin Docker, servicio systemd. Se clona el repo y se ejecuta `pnpm install`
-  en el servidor (no se copia node_modules). Acceso remoto vía Tailscale (`tailscale serve`, HTTPS).
+- **Despliegue**: Ubuntu Server x64, sin Docker, servicio systemd. Se clona el repo en `/opt/rendi` (usuario de
+  sistema `rendi`, home en `/var/lib/rendi`) y se ejecuta `pnpm install` + `pnpm build` en el servidor (no se copia
+  node_modules). `rendi.service` endurecido (solo escribe en `apps/api/data`). Acceso remoto vía Tailscale
+  (`tailscale serve --bg 3000`, HTTPS válido, sin exponer a internet); en producción `HOST=127.0.0.1` y la cookie
+  exige HTTPS. `deploy/update.sh` (admin con sudo): respaldo → pull → install → build → restart. Guía completa en
+  el README.
+- **E2E de producción** (`pnpm e2e:prod`, `playwright.prod.config.ts`, `e2e/prod/`): compila, siembra
+  `data/e2e-prod.db` y levanta `node dist/server.mjs` con NODE_ENV=production y `COOKIE_SECURE=false` (puerto 3102).
+  Prueba el service worker: la lista abre y se marca sin conexión, y cerrar sesión borra `rendi-api`.
+  `pnpm e2e` no incluye esta carpeta.
 
 ## Hoja de ruta
 
 | Fase | Descripción                                                                                           | Estado       |
 | ---- | ----------------------------------------------------------------------------------------------------- | ------------ |
-| 1    | Despensa: catálogo, stock, lista de compras, escáner, vencimientos                                    | **en curso** |
+| 1    | Despensa: catálogo, stock, lista de compras, escáner, vencimientos                                    | ✅ terminada |
 | 2    | Captura rápida de precios en tienda                                                                   | pendiente    |
 | 3    | Boletas con foto + extracción con la API de Claude (visión)                                           | pendiente    |
 | 4    | Comparación de precios (fuentes intercambiables, precio unitario, total por supermercado, antigüedad) | pendiente    |
@@ -289,7 +306,8 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 4. ✅ Catálogo (crear/editar/archivar, búsqueda, códigos con packs) + escáner EAN (cámara + manual) + Open Food Facts.
 5. ✅ Despensa: lotes (FEFO, ajuste manual), acciones rápidas con deshacer (detalle, lista y escáner), por vencer.
 6. ✅ Lista de compras: manual + automática (stock mínimo), varios compradores, finalizar compra, cola offline.
-7. ⏳ PWA + despliegue: manifest, service worker, build, `rendi.service`, respaldo con cron, README completo.
+7. ✅ PWA (manifest, service worker, lista sin conexión, aviso de versión nueva) + despliegue (API sirve la app,
+   `rendi.service`, respaldo con cron, `update.sh`, README completo).
 
 ## Comandos
 
@@ -301,6 +319,7 @@ pnpm --filter @rendi/web dev:https   # web con HTTPS autofirmado (cámara desde 
 pnpm check                   # lint + typecheck + tests unitarios/integración
 pnpm e2e                     # pruebas end-to-end (Playwright, Chromium)
 pnpm e2e:screens             # capturas claro/oscuro en test-results/screens/
+pnpm e2e:prod                # compila y prueba el build de producción (service worker, sin conexión)
 pnpm exec playwright install chromium   # una vez por equipo (~115 MB en ~/.cache/ms-playwright)
 # las e2e del escáner requieren ffmpeg instalado en el sistema
 pnpm build                   # web → apps/web/dist, API → apps/api/dist/server.mjs
@@ -327,4 +346,4 @@ pnpm user:list
 ```
 
 Seed de desarrollo: usuarios `camila` y `diego`, contraseña `rendi1234`. También existen atajos en la raíz:
-`pnpm db:migrate`, `pnpm db:seed`, `pnpm db:reset`. Despliegue: se agrega en el paso 7.
+`pnpm db:migrate`, `pnpm db:seed`, `pnpm db:reset`. Despliegue, Tailscale, respaldos y restauración: README.

@@ -5,6 +5,7 @@ import { openFoodFactsLookup } from './modules/catalog/lookup/openfoodfacts'
 import { createDb } from './db/client'
 import { runMigrations } from './db/migrate'
 import { env } from './env'
+import { findWebDir, withWebApp } from './web'
 
 const db = createDb(env.DATABASE_PATH)
 const applied = runMigrations(db, {
@@ -20,8 +21,12 @@ const app = createApp({
   productLookup: env.OPEN_FOOD_FACTS ? openFoodFactsLookup() : undefined,
 })
 
-const server = serve({ fetch: app.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
-  console.log(`Rendi API escuchando en http://${info.address}:${info.port}`)
+const webDir = findWebDir(env.WEB_DIST_DIR || undefined)
+const handler = webDir ? withWebApp(app, webDir) : app
+
+const server = serve({ fetch: handler.fetch, hostname: env.HOST, port: env.PORT }, (info) => {
+  const what = webDir ? 'Rendi (API y app)' : 'Rendi API'
+  console.log(`${what} escuchando en http://${info.address}:${info.port}`)
 })
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

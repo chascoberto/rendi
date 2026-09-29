@@ -11,6 +11,11 @@ const EnvSchema = z.object({
   COOKIE_SECURE: z.stringbool().optional(),
   /** Consultar Open Food Facts al escanear un código desconocido. */
   OPEN_FOOD_FACTS: z.stringbool().default(true),
+  /**
+   * Frontend compilado que sirve la API. Por defecto: `../web/dist` en producción y nada en
+   * desarrollo (ahí lo sirve Vite). Vacío = no servirlo.
+   */
+  WEB_DIST_DIR: z.string().optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema> & { COOKIE_SECURE: boolean }
@@ -24,6 +29,9 @@ function loadEnv(): Env {
   return {
     ...parsed.data,
     COOKIE_SECURE: parsed.data.COOKIE_SECURE ?? parsed.data.NODE_ENV === 'production',
+    WEB_DIST_DIR:
+      parsed.data.WEB_DIST_DIR ??
+      (parsed.data.NODE_ENV === 'production' ? '../web/dist' : undefined),
   }
 }
 

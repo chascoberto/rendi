@@ -41,4 +41,6 @@ export function clearCachedData() {
   queryClient.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
   // Las marcas pendientes son de quien salió: no deben enviarse con la sesión de otra persona.
   clearCheckQueue()
+  // Copias de la API que guarda el service worker para abrir la lista sin conexión.
+  if ('caches' in window) void caches.delete('rendi-api')
 }

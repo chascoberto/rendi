@@ -1,7 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    // El código dentro de page.evaluate corre en el navegador.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["./**/*.ts", "../playwright.config.ts"]
+  "include": ["./**/*.ts", "../playwright.config.ts", "../playwright.prod.config.ts"]
 }

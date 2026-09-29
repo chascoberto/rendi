@@ -4,6 +4,7 @@ import { z } from 'zod'
 import App from './App.vue'
 import { startCheckQueue } from './features/shopping/checkQueue'
 import { setUnauthenticatedHandler } from './lib/api'
+import { setupPwa } from './pwa'
 import { queryClient } from './lib/query'
 import { router } from './router'
 import './styles/tokens.css'
@@ -24,3 +25,4 @@ const app = createApp(App).use(VueQueryPlugin, { queryClient }).use(router)
 // Montar tras la primera navegación evita mostrar la barra inferior antes de saber si hay sesión.
 void router.isReady().then(() => app.mount('#app'))
 startCheckQueue()
+setupPwa()

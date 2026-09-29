@@ -5,6 +5,8 @@ export interface Toast {
   message: string
   /** Acción opcional, p. ej. "Deshacer". */
   action?: { label: string; run: () => void }
+  /** Milisegundos visible; `null` = hasta que se use la acción o llegue otro toast. */
+  duration?: number | null
 }
 
 /** Duración de un toast. Las acciones rápidas se pueden deshacer mientras está visible. */
@@ -19,7 +21,8 @@ export function showToast(toast: Omit<Toast, 'id'>) {
   clearTimeout(timer)
   const shown = { ...toast, id: nextId++ }
   current.value = shown
-  timer = setTimeout(() => dismissToast(shown.id), TOAST_MS)
+  const duration = toast.duration === undefined ? TOAST_MS : toast.duration
+  if (duration !== null) timer = setTimeout(() => dismissToast(shown.id), duration)
 }
 
 /** Cierra el toast; con `id`, solo si sigue siendo ese. */
