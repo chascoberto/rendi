@@ -309,6 +309,20 @@ regular_price_clp?, observed_on, source `in_store|receipt|manual|scraper`, recei
 7. ✅ PWA (manifest, service worker, lista sin conexión, aviso de versión nueva) + despliegue (API sirve la app,
    `rendi.service`, respaldo con cron, `update.sh`, README completo).
 
+## Flujo de trabajo con git
+
+- **Una rama por paso** desde la Fase 2: `faseN/paso-M-descripcion` (p. ej. `fase2/paso-1-captura-precios`),
+  creada desde `main` actualizado. Los commits del paso van en esa rama (Conventional Commits, en español).
+- **Al terminar un paso** (verificado: `pnpm check`, `pnpm e2e`, capturas si hubo UI): merge a `main` con
+  `git merge --no-ff` y mensaje `Fin de la Fase N, paso M: <resumen>`; después tag anotado `faseN-pasoM`
+  sobre ese merge. La rama se puede borrar tras el merge.
+- **Versiones** (tags anotados `vX.Y.Z`): cada fase terminada sube el menor (Fase 1 = `v0.1.0`, Fase 2 = `v0.2.0`);
+  correcciones posteriores, el parche (`v0.1.1`). `v1.0.0` cuando se decida que está en uso real.
+- La Fase 1 se hizo con commits directos a `main`; sus tags (`fase1-paso1` … `fase1-paso7`, `v0.1.0`) se
+  agregaron después sobre esos commits.
+- **Push solo cuando el usuario lo pida.** `origin` publica en GitHub y GitLab; los tags requieren
+  `git push --follow-tags` (o `--tags`).
+
 ## Comandos
 
 ```bash
